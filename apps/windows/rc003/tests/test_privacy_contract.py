@@ -129,9 +129,14 @@ class NoElevationOrAutoDriverTests(unittest.TestCase):
                  if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant)
                  and any(isinstance(target, ast.Attribute) and target.attr == "lpVerb" for target in node.targets)]
         self.assertEqual(verbs, ["open"])
-        self.assertFalse(any(isinstance(node, ast.Assign)
-                             and any(isinstance(target, ast.Attribute) and target.attr == "lpParameters" for target in node.targets)
-                             for node in ast.walk(launch)))
+        assignments = [node for node in ast.walk(launch) if isinstance(node, ast.Assign)
+                       and any(isinstance(target, ast.Attribute) and target.attr == "lpParameters" for target in node.targets)]
+        self.assertEqual(len(assignments), 1)
+        self.assertEqual(ast.unparse(assignments[0].value), "key_mapping.STORE_APP_PREFIX + identity")
+        branch = next(node for node in ast.walk(launch) if isinstance(node, ast.If)
+                      and isinstance(node.test, ast.Name) and node.test.id == "identity"
+                      and assignments[0] in node.body)
+        self.assertIsNotNone(branch)
         self.assertNotIn("runas", text)
 
     def test_source_hid_elevation_has_a_fixed_entry_and_no_command_channel(self):

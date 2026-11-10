@@ -24,12 +24,12 @@ assert rc003_recording_row.property("descriptionText") == "仅支持按住型"
 assert not rc003_recording_row.property("editorColumnVisible")
 assert not find(window, "remoteRecordingModeRow").property("visible")
 combo = find(window, "voiceProgramCombo")
-assert combo.property("count") == 4
+assert combo.property("count") == 5
 assert combo.property("currentIndex") == -1, (combo.property("currentIndex"), controller.selectedVoiceProgramIndex)
 assert combo.property("displayText") == "请选择语音程序"
 assert not find(window, "voiceHotkeyRow").property("visible")
 assert not find(window, "voiceProgramAutoStartRow").property("visible")
-assert QMetaObject.invokeMethod(combo, "activated", Q_ARG(int, 4))
+assert QMetaObject.invokeMethod(combo, "activated", Q_ARG(int, 5))
 assert controller.selectedVoiceProgramIndex == 0
 
 def choose(index, provider):
@@ -62,6 +62,23 @@ assert find(window, "voiceHotkeyRow").property("visible")
 assert find(window, "refreshVoiceHotkeyButton").property("visible")
 assert find(window, "recordVoiceHotkeyButton").property("visible")
 assert find(window, "openVoiceProgramSettingsButton").property("visible")
+choose(4, "fun_asr_nano")
+assert find(window, "nanoSettingsRow").property("visible")
+assert find(window, "nanoThreadsCombo").property("enabled")
+assert not find(window, "voiceHotkeyRow").property("visible")
+assert not find(window, "refreshVoiceHotkeyButton").property("visible")
+assert not find(window, "recordVoiceHotkeyButton").property("visible")
+assert not find(window, "openVoiceProgramSettingsButton").property("visible")
+assert not find(window, "voiceProgramElevatedCheckBox").property("visible")
+assert not find(window, "virtualAudioRow").property("visible")
+assert not find(window, "outputEndpointRow").property("visible")
+assert not find(window, "voiceTestSection").property("visible")
+assert find(window, "microphonePrivacyRow").property("visible")
+assert rc003_recording_row.property("visible")
+assert not find(window, "remoteRecordingModeRow").property("visible")
+assert controller.voiceProgramNanoSelected
+assert find(window, "downloadModel_fun_asr_nano").property("visible")
+assert controller.voiceProgramStatusCode == "built_in_adapter"
 choose(1, "wetype")
 assert not switch.property("visible")
 choose(2, "doubao_ime")
@@ -77,7 +94,7 @@ def load_legacy_custom():
     render(window, app)
     assert combo.property("currentIndex") == -1
     assert combo.property("displayText") == "自定义程序（旧）"
-    assert combo.property("count") == 4
+    assert combo.property("count") == 5
     assert m.config.config_path(m.config.config_root()).read_bytes() == before
 
 load_legacy_custom()
@@ -111,7 +128,7 @@ if image_dir:
     window.grabWindow().save(str(image_path / (os.environ["VOICE_SELECTION_STYLE"] + ".png")))
 choose(0, "sogou")
 assert controller.voiceProgramLaunchOnBridgeStart
-assert QMetaObject.invokeMethod(combo, "activated", Q_ARG(int, 4))
+assert QMetaObject.invokeMethod(combo, "activated", Q_ARG(int, 5))
 assert controller.selectedVoiceProgramIndex == 1
 load_legacy_custom()
 assert not controller.voiceProgramLaunchOnBridgeStart

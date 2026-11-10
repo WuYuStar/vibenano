@@ -49,6 +49,25 @@ class ChatterflyConfigurationTests(unittest.TestCase):
             self.assertEqual(target.arguments, f'"{version / "FySetting.exe"}" --page=settings')
 
 
+class FasterWhisperConfigurationTests(unittest.TestCase):
+    def test_new_local_provider_does_not_inherit_previous_shortcut(self):
+        old = config.default_config()
+        old["voice_program"] = {"provider": programs.VOICE_PROGRAM_FASTER_WHISPER}
+        old["voice_hotkey"] = "ralt"
+        old["voice_hotkeys"] = {"hold": "ralt"}
+        old.pop("voice_hotkeys_by_provider", None)
+
+        config._normalize_voice_hotkey(old)
+
+        self.assertEqual(config.voice_hotkey_for_provider(old, "faster_whisper"), "")
+        self.assertEqual(old["voice_hotkey"], "")
+        self.assertEqual(old["voice_hotkeys"], {"hold": ""})
+        self.assertEqual(
+            old["voice_hotkeys_by_provider"]["faster_whisper"],
+            {"hold": "", "source": config.VOICE_HOTKEY_SOURCE_DEFAULT},
+        )
+
+
 class ChatterflyHostTests(unittest.TestCase):
     def setUp(self):
         fixtures.HostTests.setUp(self)

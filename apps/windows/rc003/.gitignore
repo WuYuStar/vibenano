@@ -8,3 +8,5 @@ build/smoke-work-*/
 build/ui-audit-*/
 src/ovb_rc003/frida_assets/*.xz
 无线麦便携测试包-*.zip
+
+# Native Nano build output lives under the existing ignored .build directory.

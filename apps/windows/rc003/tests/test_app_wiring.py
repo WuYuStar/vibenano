@@ -3301,6 +3301,524 @@ class HostHotkeyFailureSuppressesMicOpenTests(_AppWiringTestCase):
         self.assertTrue(self.app._voice_shortcut.controller.active)
 
 
+class _FakeLocalPcmCapture:
+    """Record the local-capture contract without retaining real audio."""
+
+    def __init__(self):
+        self.chunks = []
+        self.finish_calls = 0
+        self.cancel_calls = 0
+        self.accept_appends = True
+
+    def append(self, pcm_bytes):
+        self.chunks.append(bytes(pcm_bytes))
+        return self.accept_appends
+
+    def finish(self):
+        self.finish_calls += 1
+        return b"".join(self.chunks)
+
+    def cancel(self):
+        self.cancel_calls += 1
+
+
+class _FakeLocalWhisperRuntime:
+    """An inference queue fake: submission and cancellation are explicit."""
+
+    def close(self, timeout=None):
+        self.closed = True
+        return True
+
+    def begin(self, owner, settings):
+        self.begin_call = (owner, settings)
+        return True
+
+    def feed(self, owner, pcm):
+        self.feed_call = (owner, bytes(pcm))
+        return True
+
+    def __init__(self):
+        self.submit_calls = []
+        self.cancel_calls = []
+        self.submit_result = True
+
+    def submit(self, owner, pcm_bytes, settings, target):
+        self.submit_calls.append((owner, bytes(pcm_bytes), settings, target))
+        return self.submit_result
+
+    def cancel(self, owner):
+        self.cancel_calls.append(owner)
+
+
+class LocalWhisperVoiceWiringTests(_AppWiringTestCase):
+    """Exercise the real RC003 local-voice state machine with fake native edges."""
+
+    def setUp(self):
+        super().setUp()
+        self.initial_engine_settings = {
+            "provider": "fun_asr_nano",
+            "faster_whisper_model": "tiny",
+            "faster_whisper_threads": 1,
+            "faster_whisper_beam_size": 1,
+        }
+        self._select_local_provider()
+        self.target = object()
+        self.capture = _FakeLocalPcmCapture()
+        self.runtime = _FakeLocalWhisperRuntime()
+        # Prevent the lazy production constructor from starting a worker. The
+        # real app still owns and passes the same attempt-owner identities.
+        self.app._local_whisper_runtime = self.runtime
+        self.app._voice_audio.sink = None
+        self.app._supervisor.request_reconnect = mock.Mock()
+        self.watchdogs = []
+
+        def watchdog_factory(_delay, callback):
+            timer = _ManualTimer(callback)
+            self.watchdogs.append(timer)
+            return timer
+
+        self.app._voice_hold_watchdog_timer_factory = watchdog_factory
+
+        patches = (
+            mock.patch.object(
+                app_module.local_speech_core,
+                "PcmCapture",
+                return_value=self.capture,
+            ),
+            mock.patch.object(
+                app_module.win32_input,
+                "capture_text_target",
+                return_value=self.target,
+            ),
+            mock.patch.object(self.app._voice_audio, "open", return_value=True),
+            mock.patch.object(
+                self.app,
+                "_wait_for_sogou_voice_process",
+                return_value=True,
+            ),
+            mock.patch.object(
+                app_module.voice_program_manager,
+                "launch_voice_program",
+            ),
+            mock.patch.object(
+                app_module.win32_input,
+                "send_voice_key_combo_down",
+            ),
+            mock.patch.object(
+                app_module.win32_input,
+                "send_voice_key_combo_up",
+            ),
+            mock.patch.object(
+                self.app,
+                "_start_voice_key_physicalizer",
+            ),
+            mock.patch.object(
+                app_module.voice_interaction_diagnostics_windows,
+                "capture_focus_snapshot",
+                return_value=app_module.voice_interaction_diagnostics_windows.FocusSnapshot(
+                    supported=False
+                ),
+            ),
+        )
+        started = [patch.start() for patch in patches]
+        for patch in patches:
+            self.addCleanup(patch.stop)
+        (
+            self.capture_factory,
+            self.capture_text_target,
+            self.audio_open,
+            self.wait_for_external_process,
+            self.launch_external_process,
+            self.hotkey_down,
+            self.hotkey_up,
+            self.start_physicalizer,
+            _focus_snapshot,
+        ) = started
+
+    def tearDown(self):
+        # Do not leave a synthetic attempt owner alive between tests. This is
+        # after each test's assertions, so cancellation counts remain exact.
+        with self.app._voice_shortcut.lock:
+            self.app._cancel_local_voice_capture_locked()
+        super().tearDown()
+
+    def _select_local_provider(self, **overrides):
+        settings = {
+            "provider": voice_program_manager.VOICE_PROGRAM_FUN_ASR_NANO,
+            **self.initial_engine_settings,
+            **overrides,
+        }
+        self.app._config["voice_program"] = (
+            voice_program_manager.normalize_voice_program_settings(settings)
+        )
+
+    def _start_physical_hold(self, *, with_audio):
+        self.app._on_button_event("mic", True, event_source="hid")
+        self.assertTrue(self.app._voice_shortcut.controller.active)
+        owner = self.app._local_voice_owner
+        self.assertIsNotNone(owner)
+        self.assertIs(self.app._local_voice_capture, self.capture)
+        if with_audio:
+            self.app._on_control_event(AudioStarted(session_id=41))
+        self.assertEqual(self.app._voice_audio_stream_active, with_audio)
+        self.assertEqual(self.app._ble_session.mic_open_calls, 0)
+        return owner
+
+    def _release_physical_hold(self):
+        self.app._on_button_event("mic", False, event_source="hid")
+
+    def test_faster_whisper_backend_and_mapping_bypass_all_hotkey_preparation(self):
+        self.assertEqual(
+            self.app._configured_voice_hotkey_backend(),
+            app_module._VOICE_HOTKEY_BACKEND_LOCAL,
+        )
+        self.app._voice_key_physicalizer_ready = False
+        self.app._config["voice_hotkeys"] = {"hold": "not+a+valid+hotkey+"}
+        action = self.app._primary_button_action("mic")
+
+        with mock.patch.object(
+            app_module.hotkey.HotkeySpec,
+            "parse",
+            side_effect=AssertionError("local mode must not parse a hotkey"),
+        ) as parse, mock.patch.object(
+            app_module.win32_keys,
+            "resolve_vk_codes",
+            side_effect=AssertionError("local mode must not resolve key tokens"),
+        ) as resolve, mock.patch.object(
+            app_module.win32_input,
+            "can_begin_tracked_hold",
+            side_effect=AssertionError("local mode must not inspect key tracking"),
+        ) as tracked_hold:
+            self.assertTrue(self.app._prepare_voice_mapping_locked("mic", action))
+
+        parse.assert_not_called()
+        resolve.assert_not_called()
+        tracked_hold.assert_not_called()
+        self.start_physicalizer.assert_not_called()
+
+    def test_local_start_owns_capture_and_target_without_endpoint_process_or_hotkey(self):
+        started = self.app._handle_mic_button_pressed()
+
+        self.assertTrue(started)
+        self.capture_text_target.assert_called_once_with()
+        self.capture_factory.assert_called_once_with(
+            max_seconds=app_module._VOICE_HOLD_SAFETY_SECONDS
+        )
+        self.assertIs(self.app._local_voice_capture, self.capture)
+        self.assertIs(self.app._local_voice_target, self.target)
+        self.assertEqual(
+            self.app._local_voice_settings,
+            self.initial_engine_settings,
+        )
+        owner = self.app._local_voice_owner
+        self.assertIsNotNone(owner)
+        self.assertIs(self.app._local_whisper_status_owner, owner)
+        self.assertIsNone(self.app._voice_audio.sink)
+        self.assertIsNone(self.app._voice_audio.writer)
+        self.audio_open.assert_not_called()
+        self.wait_for_external_process.assert_not_called()
+        self.launch_external_process.assert_not_called()
+        self.hotkey_down.assert_not_called()
+        self.hotkey_up.assert_not_called()
+        self.start_physicalizer.assert_not_called()
+        self.assertEqual(self.app._ble_session.mic_open_calls, 1)
+        self.assertEqual(self.app._ble_session.mic_close_calls, 0)
+        self.assertTrue(self.app._voice_shortcut.controller.active)
+        self.assertEqual(
+            self.app._voice_shortcut.active_backend,
+            app_module._VOICE_HOTKEY_BACKEND_LOCAL,
+        )
+        self.assertIsNone(self.app._voice_shortcut.pending_tokens)
+        self.assertIsNone(self.app._voice_shortcut.pending_backend)
+        self.assertFalse(self.app._voice_pcm_forwarding_enabled)
+        self.assertEqual(self.runtime.submit_calls, [])
+
+    def test_local_pcm_uses_no_sink_and_updates_stats_and_first_frame_status(self):
+        self._start_physical_hold(with_audio=True)
+        samples = [100, -100, 200, -200]
+        with mock.patch.object(
+            self.app,
+            "_on_voice_audio_first_frame",
+            wraps=self.app._on_voice_audio_first_frame,
+        ) as first_frame:
+            self.app._on_pcm_frame(samples)
+            self.app._on_pcm_frame([300, -300])
+
+        self.assertEqual(
+            self.capture.chunks,
+            [
+                app_module.local_speech_core.pcm_bytes_from_samples(samples),
+                app_module.local_speech_core.pcm_bytes_from_samples([300, -300]),
+            ],
+        )
+        first_frame.assert_called_once_with()
+        stats = self.app._voice_audio.stats.summary()
+        self.assertEqual(stats["frames"], 2)
+        self.assertEqual(stats["samples"], 6)
+        self.assertEqual(stats["peak"], 300)
+        status = bridge_runtime_status.read_status(self.app._config_root)
+        self.assertEqual(
+            status.voice_runtime_state,
+            bridge_runtime_status.VOICE_RUNTIME_RECEIVING_AUDIO,
+        )
+        self.assertEqual(
+            status.voice_runtime_provider,
+            voice_program_manager.VOICE_PROGRAM_FUN_ASR_NANO,
+        )
+        self.assertIsNone(self.app._voice_audio.sink)
+        self.assertIsNone(self.app._voice_audio.writer)
+        self.audio_open.assert_not_called()
+
+    def test_release_first_keeps_tail_capture_then_submits_one_start_snapshot(self):
+        owner = self._start_physical_hold(with_audio=True)
+        samples = [11, -12, 13]
+        self.app._on_pcm_frame(samples)
+        snapshot = self.app._local_voice_settings
+        changed_target = object()
+        self.capture_text_target.return_value = changed_target
+        self._select_local_provider(
+            faster_whisper_model="small",
+            faster_whisper_threads=8,
+            faster_whisper_beam_size=5,
+        )
+
+        self._release_physical_hold()
+
+        self.assertIs(self.app._local_voice_capture, self.capture)
+        self.assertTrue(self.app._local_voice_release_seen)
+        self.assertEqual(self.capture.finish_calls, 0)
+        self.assertEqual(self.runtime.submit_calls, [])
+
+        self.app._on_control_event(AudioStopped())
+        self._release_physical_hold()
+        self.app._on_control_event(AudioStopped())
+
+        self.assertEqual(len(self.runtime.submit_calls), 1)
+        submitted_owner, pcm, settings, target = self.runtime.submit_calls[0]
+        self.assertIs(submitted_owner, owner)
+        self.assertEqual(
+            pcm,
+            app_module.local_speech_core.pcm_bytes_from_samples(samples),
+        )
+        self.assertIs(settings, snapshot)
+        self.assertEqual(settings, self.initial_engine_settings)
+        self.assertIs(target, self.target)
+        self.assertIsNot(target, changed_target)
+        self.capture_text_target.assert_called_once_with()
+        self.assertEqual(self.capture.finish_calls, 1)
+        self.assertEqual(self.capture.cancel_calls, 0)
+        self.assertIsNone(self.app._local_voice_capture)
+
+    def test_audio_stop_first_and_duplicate_releases_submit_exactly_once(self):
+        owner = self._start_physical_hold(with_audio=True)
+        self.app._on_pcm_frame([21, -22])
+
+        self.app._on_control_event(AudioStopped())
+        self._release_physical_hold()
+        self._release_physical_hold()
+        self.app._on_control_event(AudioStopped())
+
+        self.assertEqual(len(self.runtime.submit_calls), 1)
+        submitted_owner, pcm, _settings, target = self.runtime.submit_calls[0]
+        self.assertIs(submitted_owner, owner)
+        self.assertEqual(
+            pcm,
+            app_module.local_speech_core.pcm_bytes_from_samples([21, -22]),
+        )
+        self.assertIs(target, self.target)
+        self.assertEqual(self.capture.finish_calls, 1)
+        self.assertEqual(self.capture.cancel_calls, 0)
+        self.hotkey_up.assert_not_called()
+
+    def test_release_without_a_stream_submits_one_empty_capture(self):
+        owner = self._start_physical_hold(with_audio=False)
+
+        self._release_physical_hold()
+        self._release_physical_hold()
+        self.app._on_control_event(AudioStopped())
+        self.app._on_control_event(AudioStopped())
+
+        self.assertEqual(len(self.runtime.submit_calls), 1)
+        submitted_owner, pcm, settings, target = self.runtime.submit_calls[0]
+        self.assertIs(submitted_owner, owner)
+        self.assertEqual(pcm, b"")
+        self.assertEqual(settings, self.initial_engine_settings)
+        self.assertIs(target, self.target)
+        self.assertEqual(self.capture.finish_calls, 1)
+        self.assertEqual(self.capture.cancel_calls, 0)
+
+    def test_watchdog_cancels_capture_and_owner_without_submitting(self):
+        owner = self._start_physical_hold(with_audio=True)
+        self.app._on_pcm_frame([31])
+
+        self.assertEqual(len(self.watchdogs), 1)
+        self.watchdogs[0].fire()
+
+        self.assertEqual(self.capture.cancel_calls, 1)
+        self.assertEqual(self.capture.finish_calls, 0)
+        self.assertEqual(self.runtime.cancel_calls, [owner])
+        self.assertEqual(self.runtime.submit_calls, [])
+        self.assertIsNone(self.app._local_voice_capture)
+        self.assertIsNone(self.app._local_voice_owner)
+        self.assertIsNone(self.app._local_whisper_status_owner)
+        self.hotkey_down.assert_not_called()
+        self.hotkey_up.assert_not_called()
+        self.app._supervisor.request_reconnect.assert_called_once_with()
+        self.assertEqual(self.app._ble_session.mic_close_calls, 1)
+
+    def test_audio_start_abort_cancels_capture_and_owner_without_submitting(self):
+        owner = self._start_physical_hold(with_audio=True)
+
+        with self.app._voice_shortcut.lock:
+            self.app._abort_voice_audio_start_locked("test local abort")
+
+        self.assertEqual(self.capture.cancel_calls, 1)
+        self.assertEqual(self.capture.finish_calls, 0)
+        self.assertEqual(self.runtime.cancel_calls, [owner])
+        self.assertEqual(self.runtime.submit_calls, [])
+        self.assertIsNone(self.app._local_voice_capture)
+        self.assertIsNone(self.app._local_whisper_status_owner)
+        self.assertFalse(self.app._voice_audio_stream_active)
+
+    def test_connection_cleanup_cancels_capture_and_owner_without_submitting(self):
+        owner = self._start_physical_hold(with_audio=True)
+        ble_session = self.app._ble_session
+
+        self._loop.run_until_complete(self.app._cleanup_once())
+
+        self.assertEqual(self.capture.cancel_calls, 1)
+        self.assertEqual(self.capture.finish_calls, 0)
+        self.assertEqual(self.runtime.cancel_calls, [owner])
+        self.assertEqual(self.runtime.submit_calls, [])
+        self.assertIsNone(self.app._local_voice_capture)
+        self.assertIsNone(self.app._local_whisper_status_owner)
+        self.assertEqual(ble_session.close_calls, 1)
+        self.assertIsNone(self.app._ble_session)
+        self.hotkey_up.assert_not_called()
+
+    def test_cleanup_after_release_cancels_pending_inference_without_resubmitting(self):
+        owner = self._start_physical_hold(with_audio=False)
+        self._release_physical_hold()
+        self.assertEqual(len(self.runtime.submit_calls), 1)
+        self.assertIs(self.app._local_whisper_status_owner, owner)
+
+        self._loop.run_until_complete(self.app._cleanup_once())
+
+        self.assertEqual(self.runtime.cancel_calls, [owner])
+        self.assertEqual(len(self.runtime.submit_calls), 1)
+        self.assertIsNone(self.app._local_whisper_status_owner)
+
+    def test_provider_reload_cancels_delayed_local_text_result(self):
+        owner = self._start_physical_hold(with_audio=False)
+        self._release_physical_hold()
+        self.assertEqual(len(self.runtime.submit_calls), 1)
+        refreshed = config.load_config(self.app._config_path)
+        refreshed["voice_program"] = (
+            voice_program_manager.normalize_voice_program_settings(
+                {"provider": voice_program_manager.VOICE_PROGRAM_WETYPE}
+            )
+        )
+        config.save_config(self.app._config_path, refreshed)
+
+        self.app._reload_settings_if_changed()
+
+        self.assertEqual(self.runtime.cancel_calls, [owner])
+        self.assertIsNone(self.app._local_whisper_status_owner)
+        self.assertEqual(
+            self.app._config["voice_program"]["provider"],
+            voice_program_manager.VOICE_PROGRAM_WETYPE,
+        )
+        with mock.patch.object(app_module.win32_input, "paste_text") as paste:
+            self.assertFalse(
+                self.app._on_local_whisper_text(owner, "late text", self.target)
+            )
+        paste.assert_not_called()
+        self.assertEqual(len(self.runtime.submit_calls), 1)
+
+    def test_local_text_routes_through_locked_action_with_target_and_bool_result(self):
+        owner = object()
+        target = object()
+        self.app._local_whisper_status_owner = owner
+        with mock.patch.object(
+            self.app,
+            "_apply_button_action_locked",
+            side_effect=[True, False, None],
+        ) as apply_action:
+            results = [
+                self.app._on_local_whisper_text(owner, "recognized text", target)
+                for _ in range(3)
+            ]
+
+        self.assertEqual(results, [True, False, False])
+        self.assertEqual(apply_action.call_count, 3)
+        for call in apply_action.call_args_list:
+            action = call.args[0]
+            self.assertEqual(action.kind, key_mapping.ActionKind.TEXT)
+            self.assertEqual(action.text, "recognized text")
+            self.assertIs(call.kwargs["expected_target"], target)
+
+    def test_stale_owner_wrong_provider_or_disabled_input_never_pastes(self):
+        owner = object()
+        target = object()
+        for guard in ("stale_owner", "wrong_provider", "input_disabled"):
+            with self.subTest(guard=guard):
+                self._select_local_provider()
+                self.app._accept_input_events = True
+                self.app._local_whisper_status_owner = owner
+                callback_owner = object() if guard == "stale_owner" else owner
+                if guard == "wrong_provider":
+                    self.app._config["voice_program"] = (
+                        voice_program_manager.normalize_voice_program_settings(
+                            {"provider": voice_program_manager.VOICE_PROGRAM_WETYPE}
+                        )
+                    )
+                elif guard == "input_disabled":
+                    self.app._accept_input_events = False
+
+                with mock.patch.object(app_module.win32_input, "paste_text") as paste:
+                    accepted = self.app._on_local_whisper_text(
+                        callback_owner,
+                        "must not paste",
+                        target,
+                    )
+
+                self.assertFalse(accepted)
+                paste.assert_not_called()
+        self.app._accept_input_events = True
+
+
+    def test_retired_paraformer_migrates_and_keeps_text_target(self):
+        self._select_local_provider(provider="paraformer_streaming")
+        owner = self._start_physical_hold(with_audio=True)
+        self.assertEqual(self.app._local_voice_settings["provider"], "fun_asr_nano")
+        self.app._capture_local_voice_pcm_locked([1, 2, 3])
+        self.assertEqual(self.runtime.submit_calls, [])
+        self.app._finish_local_voice_capture_locked()
+        self.assertIs(self.runtime.submit_calls[0][0], owner)
+        self.assertIs(self.runtime.submit_calls[0][3], self.target)
+
+    def test_switching_local_engine_closes_and_discards_old_runtime(self):
+        before = dict(self.app._config)
+        after = dict(before, voice_program={"provider": "wetype"})
+        self.app._cancel_local_voice_on_provider_change(before, after)
+        self.assertTrue(self.runtime.closed)
+        self.assertIsNone(self.app._local_whisper_runtime)
+
+
+    def test_local_release_clears_recording_while_preserving_tail_capture(self):
+        self._start_physical_hold(with_audio=True)
+        self.app._on_pcm_frame([1, 2, 3])
+        self._release_physical_hold()
+        self.assertFalse(self.app._runtime_voice_active)
+        self.assertEqual(self.app._runtime_voice_state, "finishing")
+        self.assertIs(self.app._local_voice_capture, self.capture)
+        self.assertEqual(self.runtime.submit_calls, [])
+        self.app._on_pcm_frame([4, 5])
+        self.assertEqual(self.app._runtime_voice_state, "finishing")
+        self.app._on_control_event(AudioStopped())
+        self.assertEqual(len(self.runtime.submit_calls), 1)
+
+
 class CorruptButtonBindingFailsClosedTests(_AppWiringTestCase):
     def test_unknown_or_malformed_binding_does_not_escape_raw_input_callback(self):
         for malformed in (

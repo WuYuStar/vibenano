@@ -1,8 +1,12 @@
 # Copyright
 
-**Remote Mic · Windows RC003**
+**VibeNano · Remote Mic Windows RC003 derivative**
 
 Copyright (C) 2026 Remote Mic contributors
+
+Upstream: Copyright (C) 2026 Open Voice Bridge contributors
+
+VibeNano derivative modifications: Copyright (C) 2026 WuYuStar
 
 本仓库当前只维护 Windows RC003 客户端。它基于 GPL-3.0-only 项目
 [`nijez/open-voice-bridge`](https://github.com/nijez/open-voice-bridge) 的 Windows
@@ -16,3 +20,5 @@ Windows 客户端的代码按 `GPL-3.0-only` 发布。完整许可见
 
 本 Windows-only 分支不分发原 macOS 应用的 Swift 源码、AppKit 资源、官方 Logo 或
 macOS 驱动安装包；因此不对这些已移除内容的品牌资产授予任何使用权。
+
+VibeNano 的直接上游为 ZSTDJan/windows-remote-mic-app；本次维护者仅主张新增改动的版权，既有作者与贡献者归属不变。

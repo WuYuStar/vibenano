@@ -775,6 +775,22 @@ ApplicationWindow {
     palette.highlight: tokens.accent
     palette.highlightedText: tokens.accentText
 
+    VoiceActivityOverlay {
+        id: voiceActivityOverlay
+        objectName: "voiceActivityOverlay"
+        screen: window.screen
+        activityState: window.applicationExitInProgress
+            ? "" : SettingsController.voiceActivityState
+    }
+
+    Timer {
+        objectName: "voiceActivityRefreshTimer"
+        interval: 200
+        repeat: true
+        running: SettingsController.bridgeRunning && !window.applicationExitInProgress
+        onTriggered: SettingsController.refreshVoiceActivity()
+    }
+
     Timer {
         id: bridgeStatusRefreshTimer
         objectName: "bridgeStatusRefreshTimer"

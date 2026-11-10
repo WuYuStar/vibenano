@@ -18,6 +18,7 @@ _VOICE_HOTKEY_BACKEND_MARKED = "marked_keybd_event"
 _VOICE_HOTKEY_BACKEND_CHATTERFLY = "chatterfly_hotkey"
 _VOICE_HOTKEY_BACKEND_WETYPE = "wetype_hotkey"
 _VOICE_HOTKEY_BACKEND_DOUBAO = "doubao_hotkey"
+_VOICE_HOTKEY_BACKEND_LOCAL = "local_whisper"
 _INPUT_PROFILE_VOICE_HOTKEY_BACKENDS = frozenset(
     {_VOICE_HOTKEY_BACKEND_WETYPE, _VOICE_HOTKEY_BACKEND_DOUBAO}
 )
@@ -90,6 +91,8 @@ class VoiceShortcutSession:
     def provider_for_backend(backend: str) -> str:
         if backend == _VOICE_HOTKEY_BACKEND_DOUBAO:
             return voice_program_manager.VOICE_PROGRAM_DOUBAO_IME
+        if backend == _VOICE_HOTKEY_BACKEND_LOCAL:
+            return voice_program_manager.VOICE_PROGRAM_FASTER_WHISPER
         return voice_program_manager.VOICE_PROGRAM_WETYPE
 
 
@@ -284,6 +287,19 @@ class VoiceShortcutSession:
             tokens=list(tokens),
             source="voice_controller",
         )
+        if backend == _VOICE_HOTKEY_BACKEND_LOCAL:
+            # Reuse the hold state machine without emitting a host shortcut.
+            # Local PCM capture and transcription have separate attempt owners.
+            self.pending_tokens = None
+            self.pending_backend = None
+            self.active_backend = backend if action == voice_controller.VoiceHostAction.KEY_DOWN else None
+            if action == voice_controller.VoiceHostAction.KEY_UP:
+                self.services.resume_tracking()
+            self.trace.emit(
+                "voice_hotkey_result", **trace_context, backend=backend,
+                delivered=True, transport="local_no_hotkey",
+            )
+            return True
         if backend == _VOICE_HOTKEY_BACKEND_CHATTERFLY:
             if action == voice_controller.VoiceHostAction.KEY_DOWN:
                 try:

@@ -1,0 +1,12 @@
+{
+  "fun_asr_source_commit_prefix": "c0a20e2",
+  "llama_commit": "8086439a4cea94c71a5dfb8fe4ad1546aebd640f",
+  "compiler": "x86_64-w64-mingw32-g++-posix 13.2.0",
+  "native_sha256": "f01e6ebce38336398bc7b8bbb4e45af477b2d8c3ec6718a020cc435f553d9327",
+  "cpu": "Windows x64 AVX2 F16C FMA",
+  "protocol": "RCN1",
+  "source_archives": {
+    "fun-asr-source.tar.gz": "fe451d4091b4f7e85d6f1e33da54d5804053c7ecc462cb37403b1c90f470a1d7",
+    "llama-source.tar.gz": "4d861f2b46ecbcbd6e601b5c8c84e4ddd0b573e67b61936739aed1751406e397"
+  }
+}

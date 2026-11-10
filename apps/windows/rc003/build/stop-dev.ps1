@@ -15,7 +15,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$RC003Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$RC003Root = [System.IO.Path]::GetFullPath((Resolve-Path (Join-Path $PSScriptRoot "..")).ProviderPath)
 $DevMarker = "--remote-mic-dev-session"
 $CurrentSessionId = [uint32][System.Diagnostics.Process]::GetCurrentProcess().SessionId
 $InterpreterPaths = @(

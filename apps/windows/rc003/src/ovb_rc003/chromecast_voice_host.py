@@ -32,6 +32,7 @@ from . import hotkey
 from . import sogou_submit_windows
 from . import voice_playback_session_windows as playback_sessions
 from . import bridge_runtime_status as status, voice_controller, key_detection_bridge, win32_input, voice_program_manager
+from . import local_speech_core, local_speech_provider
 
 
 # ATVV decodes mono 16 kHz PCM. Five seconds of startup audio occupy at most
@@ -59,6 +60,10 @@ class VoiceHostServices:
     set_result: Callable
     wait_sogou: Callable
     disable_forwarding: Callable
+    local_runtime: Callable
+    local_claim: Callable
+    local_cancel: Callable
+    capture_text_target: Callable
 
 
 class VoiceHost:
@@ -106,6 +111,13 @@ class VoiceHost:
         self._doubao_finish_attempted = False
         self._settings_claimed = False
         self._cancelled_attempts = set()
+        self._local_owner = None
+        self._local_capture = None
+        self._local_target = None
+        self._local_settings = None
+        self._local_trigger = "hold"
+        self._local_submit_attempted = False
+        self._local_cancelled = False
 
     def start(self, client):
         with self._input_lock:
@@ -219,6 +231,13 @@ class VoiceHost:
             self.pending_samples = 0
             self._output_pcm.clear()
             self._playback_cleanup_pending = False
+            self._local_owner = None
+            self._local_capture = None
+            self._local_target = None
+            self._local_settings = None
+            self._local_trigger = "hold"
+            self._local_submit_attempted = False
+            self._local_cancelled = False
             self.provider = voice_program_manager.normalize_voice_program_settings(
                 services.settings().get("voice_program")
             )["provider"]
@@ -254,11 +273,20 @@ class VoiceHost:
                     "sogou",
                     voice_program_manager.VOICE_PROGRAM_DOUBAO_IME,
                     voice_program_manager.VOICE_PROGRAM_CHATTERFLY,
+                    voice_program_manager.VOICE_PROGRAM_FASTER_WHISPER,
+                    voice_program_manager.VOICE_PROGRAM_PARAFORMER,
+                    voice_program_manager.VOICE_PROGRAM_FUN_ASR_NANO,
+                    voice_program_manager.VOICE_PROGRAM_QWEN3_ASR,
                 )
                 or (self.provider == "wetype" and services.configured_backend() != "wetype_hotkey")
                 or not services.voice_mapping_enabled()):
             services.logger.warning("Chromecast voice: selected provider is not supported")
             self._fail_voice("voice host is not supported or voice mapping is disabled")
+            return
+        if self.provider in voice_program_manager.LOCAL_VOICE_PROVIDERS:
+            self._start_local(trigger)
+            if self.failure_result is not None:
+                self._stop_host()
             return
         with services.shortcut.lock:
             if services.shortcut.pending_tokens and not services.shortcut.release_pending():
@@ -342,6 +370,33 @@ class VoiceHost:
                 return  # Poll cancels this attempt before ready/PCM can escape.
             services.set_active(True)
             services.set_result(status.VOICE_RUNTIME_ACTIVE)
+
+    def _start_local(self, trigger):
+        services = self.services
+        self._local_trigger = trigger
+        try:
+            target = services.capture_text_target()
+            engine_settings = local_speech_provider.normalize_settings(
+                services.settings().get("voice_program")
+            )
+            owner = object()
+            capture = local_speech_core.PcmCapture(max_seconds=600)
+            self._local_owner = owner
+            self._local_capture = capture
+            self._local_target = target
+            self._local_settings = engine_settings
+            services.audio.stats.reset()
+            services.local_claim(owner)
+        except Exception:
+            self._fail_voice("local voice capture could not start")
+            return
+        # Local recognition needs neither an output endpoint nor an external
+        # microphone observer. The decoder is ready as soon as its owner exists.
+        self.engaged = True
+        self.confirmed = self.ready_sent = True
+        services.set_active(True)
+        services.set_result(status.VOICE_RUNTIME_ACTIVE)
+        self.reply("ready")
 
     def _start_chatterfly(self, input_epoch, trigger):
         services = self.services
@@ -658,7 +713,83 @@ class VoiceHost:
                 and not services.shortcut.control_flag("completion_pending", backend)
                 and not services.shortcut.control_flag("cleanup_pending", backend))
 
+    def _cancel_local(self):
+        if self._local_cancelled or self._local_submit_attempted:
+            return
+        self._local_cancelled = True
+        if self._local_capture is not None:
+            self._local_capture.cancel()
+        if self._local_owner is not None:
+            try:
+                self.services.local_cancel(self._local_owner)
+            except Exception:
+                self.services.logger.warning("Chromecast local voice cancellation failed")
+
+    def _stop_local_host(self, reason):
+        services = self.services
+        if self.closed:
+            self.reply("released")
+            return True
+        submit = (
+            reason in ("released", "device_ended", "second_press", "time_limit")
+            and self.engaged
+            and self.confirmed
+            and self.state in ("starting", "recording")
+            and self.failure_result is None
+            and not self.stopping.is_set()
+            and not self.input_lost.is_set()
+            and not self._tracking_loss_seen
+            and self._local_owner is not None
+            and self._local_capture is not None
+            and not self._local_submit_attempted
+            and not self._local_cancelled
+        )
+        # This transition, rather than enqueue()'s producer cancellation mark,
+        # is the boundary after which no more local PCM can be accepted.
+        self.state, self.confirmed = "stopping", False
+        self.pending_pcm.clear()
+        self.pending_samples = 0
+        services.set_active(False)
+        if submit:
+            # Publish the release before enqueueing: inference may finish or
+            # report a loading failure immediately on another thread.
+            services.set_result(status.VOICE_RUNTIME_FINISHING)
+            self._local_submit_attempted = True
+            pcm_bytes = self._local_capture.finish()
+            self._local_capture = None
+            try:
+                accepted = services.local_runtime().submit(
+                    self._local_owner,
+                    pcm_bytes,
+                    self._local_settings,
+                    self._local_target,
+                )
+            except Exception:
+                services.logger.warning("Chromecast local voice submission failed")
+                services.set_result(status.VOICE_RUNTIME_HOST_STOP_FAILED)
+                accepted = False
+            if not accepted:
+                # A rejected submission owns no inference job. Clear its status
+                # ownership without ever retrying the same captured utterance.
+                self._local_submit_attempted = False
+                self._cancel_local()
+        else:
+            self._cancel_local()
+        self._local_target = None
+        self._local_settings = None
+        with services.shortcut.lock:
+            services.disable_forwarding()
+            self._settings_claimed = False
+            services.apply_pending_settings()
+        self.closed = True
+        with self._input_lock:
+            self._cancelled_attempts.discard(self.attempt)
+        self.reply("released")
+        return True
+
     def _stop_host(self, reason="", received_at=None):
+        if self.provider in voice_program_manager.LOCAL_VOICE_PROVIDERS:
+            return self._stop_local_host(reason)
         # Preserve only this attempt's bound capture before normal cleanup clears
         # its watcher. No other stop reason or cleanup retry may submit the host.
         finish_deadline = ((time.monotonic() if received_at is None else received_at)
@@ -843,9 +974,16 @@ class VoiceHost:
         if kind == "host_stop":
             with self._input_lock:
                 self._cancelled_attempts.add(attempt)
-            if event.get("data") == "second_press":
+            if (event.get("data") == "second_press"
+                    and self.provider not in voice_program_manager.LOCAL_VOICE_PROVIDERS):
                 self._toggle_second_press()
-            self._stop_host(event.get("data", ""), event.get("_received_at"))
+            reason = event.get("data", "")
+            if (self.provider in voice_program_manager.LOCAL_VOICE_PROVIDERS
+                    and not reason and self._local_trigger == "hold"):
+                # Recording.finish intentionally sends no reason for an ordinary
+                # hold release. Direct _stop_host() cleanup remains cancellative.
+                reason = "released"
+            self._stop_host(reason, event.get("_received_at"))
         elif kind == "state":
             self.services.logger.info("Chromecast recording attempt=%s state=%s", attempt, event["data"])
             if event["data"] == "idle" and self.closed:
@@ -855,16 +993,24 @@ class VoiceHost:
                   and event["data"] == "recording" and self.confirmed):
                 self.state = "recording"
         elif kind == "control" and self.decoder and self.state in ("starting", "recording"):
-            if self._attempt_cancelled(attempt):
+            if self.provider in voice_program_manager.LOCAL_VOICE_PROVIDERS:
+                if not self._local_input_allowed():
+                    return
+            elif self._attempt_cancelled(attempt):
                 return
             self.decoder.handle_control(bytes.fromhex(event["data"]))
         elif kind == "audio" and self.decoder and self.decoder.mic_open and self.state in ("starting", "recording"):
-            if self._attempt_cancelled(attempt):
+            if self.provider in voice_program_manager.LOCAL_VOICE_PROVIDERS:
+                if not self._local_input_allowed():
+                    return
+            elif self._attempt_cancelled(attempt):
                 return
             samples = self.decoder.handle_audio(bytes.fromhex(event["data"]))
             if not samples:
                 return
-            if self.confirmed:
+            if self.provider in voice_program_manager.LOCAL_VOICE_PROVIDERS:
+                self._capture_local(samples)
+            elif self.confirmed:
                 self._output(samples)
             elif self.pending_samples + len(samples) <= _MAX_STARTUP_SAMPLES:
                 self.pending_pcm.append(samples)
@@ -872,6 +1018,35 @@ class VoiceHost:
             else:
                 self.reply("failed")
                 self._stop_host()
+
+    def _local_input_allowed(self):
+        return (
+            self._local_capture is not None
+            and not self._local_submit_attempted
+            and not self._local_cancelled
+            and not self.closed
+            and self.state in ("starting", "recording")
+            and self.failure_result is None
+            and not self.stopping.is_set()
+            and not self.input_lost.is_set()
+            and not self._tracking_loss_seen
+        )
+
+    def _capture_local(self, samples):
+        if not self._local_input_allowed():
+            return
+        try:
+            pcm_bytes = local_speech_core.pcm_bytes_from_samples(samples)
+            accepted = self._local_capture.append(pcm_bytes)
+        except Exception:
+            accepted = False
+        if not accepted:
+            self._fail_voice("local audio capture failed", command="stop")
+            self._stop_host()
+            return
+        self.services.audio.stats.add(samples)
+        if self.services.audio.stats.frames == 1:
+            self.services.set_result(status.VOICE_RUNTIME_RECEIVING_AUDIO)
 
     def _output(self, samples):
         if (self.stopping.is_set() or self.input_lost.is_set() or not self.confirmed

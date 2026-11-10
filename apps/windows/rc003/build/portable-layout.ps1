@@ -242,7 +242,7 @@ function Assert-RC003PortableZip {
             [System.IO.Path]::DirectorySeparatorChar,
             [char]47
         )
-        $stagingRoot = (Resolve-Path -LiteralPath $StagingDirectory).Path.TrimEnd(
+        $stagingRoot = (Resolve-Path -LiteralPath $StagingDirectory).ProviderPath.TrimEnd(
             $pathSeparators
         )
         $stagingFiles = @(

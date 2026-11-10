@@ -87,6 +87,26 @@ try:
     click('actionEditorSaveButton')
     assert dialog.property('visible')
     assert '填写' in find('actionEditorValidationError').property('text')
+    # Choosing a packaged application changes only the draft, never launches it.
+    from unittest import mock
+    from ovb_rc003 import store_apps_windows
+    target = "shell:AppsFolder\\OpenAI.Codex_2p2nqsd0c76g0!App"
+    with mock.patch.object(store_apps_windows, 'installed_apps', return_value=[{'name':'ChatGPT','target':target}]):
+        click('actionEditorPrimaryPathApps')
+        deadline = __import__('time').monotonic() + 5
+        while controller.storeAppsBusy and __import__('time').monotonic() < deadline:
+            tick()
+        tick()
+        assert not controller.storeAppsBusy and not controller.storeAppsError
+        search = find('storeAppSearch')
+        search.setProperty('text', 'chat')
+        tick()
+        assert find('storeAppList').property('count') == 1
+        click('storeApp_' + target)
+    assert find('actionEditorPrimaryPathField').property('text') == target
+    click('actionEditorSaveButton')
+    assert controller._bindings['bindings']['ok']['program_path'] == target
+    click('editMapping_ok')
     typed = 'C:\\Program Files\\' + '较长目录 & 测试\\' * 8 + '程序.exe'
     field = find('actionEditorPrimaryPathField')
     field.setProperty('text', '"' + typed + '"')

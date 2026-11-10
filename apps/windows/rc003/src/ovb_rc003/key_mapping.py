@@ -256,8 +256,22 @@ def validate_preset_text(text: str) -> str:
     return text
 
 
+STORE_APP_PREFIX = "shell:AppsFolder\\"
+
+
+def store_app_id(value: str) -> str:
+    """Accept only one packaged application ID, never arbitrary Shell syntax."""
+    import re
+    if not isinstance(value, str) or not value.lower().startswith(STORE_APP_PREFIX.lower()):
+        return ""
+    identity = value[len(STORE_APP_PREFIX):]
+    if len(identity) <= 128 and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]*_[A-Za-z0-9]+![A-Za-z0-9][A-Za-z0-9._-]*", identity):
+        return identity
+    raise ValueError("应用入口无效，请重新选择已安装的应用。")
+
+
 def normalize_program_path(value: str) -> str:
-    """Accept a literal absolute Windows EXE path, never a command line.
+    """Accept an absolute EXE or one constrained packaged application target.
 
     Do not check existence here: portable snapshots and missing installations
     must remain loadable. Windows reports launch failures at execution time.
@@ -267,6 +281,15 @@ def normalize_program_path(value: str) -> str:
     value = value.strip()
     if len(value) >= 2 and value[0] == value[-1] == '"':
         value = value[1:-1]
+    # Also accept the exact Run-dialog form already verified by the user.
+    # It is normalized to an ID; no user-supplied command is ever executed.
+    if value.lower().startswith("explorer.exe "):
+        value = value[len("explorer.exe "):].strip()
+        if not value.lower().startswith(STORE_APP_PREFIX.lower()):
+            raise ValueError("请浏览程序文件或选择应用，不要填写启动命令。")
+    identity = store_app_id(value)
+    if identity:
+        return STORE_APP_PREFIX + identity
     if any(ord(char) < 32 or char in '<>"|?*' for char in value):
         raise ValueError("程序路径包含无效字符，请只填写 .exe 路径。")
     try:

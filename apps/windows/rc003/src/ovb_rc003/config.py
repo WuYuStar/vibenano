@@ -471,11 +471,16 @@ def _normalize_voice_hotkey(config: Dict[str, Any]) -> None:
             "source": source,
         }
 
-    # This provider has no historical scalar shortcut.  Selecting it in an
-    # older configuration must not inherit the previous input method's key.
+    # Providers without a historical scalar shortcut must not inherit the
+    # previous input method's key when selected in an older configuration.
     if (
-        not (provider_id == voice_program_manager.VOICE_PROGRAM_CHATTERFLY
-             and provider_id not in raw_provider_hotkeys)
+        not (provider_id in {
+            voice_program_manager.VOICE_PROGRAM_CHATTERFLY,
+            voice_program_manager.VOICE_PROGRAM_FASTER_WHISPER,
+            voice_program_manager.VOICE_PROGRAM_PARAFORMER,
+            voice_program_manager.VOICE_PROGRAM_FUN_ASR_NANO,
+            voice_program_manager.VOICE_PROGRAM_QWEN3_ASR,
+        } and provider_id not in raw_provider_hotkeys)
         and (
             explicit_current_override
             or not has_provider_hotkeys
@@ -556,6 +561,8 @@ def voice_hotkey_source_for_provider(
                 VOICE_HOTKEY_SOURCE_AUTO,
                 VOICE_HOTKEY_SOURCE_MANUAL,
             }:
+                if not candidate:
+                    return VOICE_HOTKEY_SOURCE_DEFAULT
                 from . import voice_hotkey_sync_windows
 
                 validation = voice_hotkey_sync_windows.validate_provider_hotkey(

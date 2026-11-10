@@ -85,7 +85,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  nano-runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Install Nano cross compiler
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build patch gcc-mingw-w64-x86-64-posix g++-mingw-w64-x86-64-posix
+      - name: Build pinned Nano worker
+        run: python3 apps/windows/rc003/build/nano/build-runtime.py --jobs 2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: nano-native-worker
+          path: apps/windows/rc003/.build/nano-runtime/*
+          include-hidden-files: true
+          if-no-files-found: error
   test-and-build:
+    needs: nano-runtime
+    env:
+      RC003_PUBLIC_DISTRIBUTION: "1"
     runs-on: windows-2025
     timeout-minutes: 60
     defaults:
@@ -102,7 +120,9 @@ jobs:
         with:
           python-version: "3.12.10"
           cache: pip
-          cache-dependency-path: apps/windows/rc003/requirements-dev.txt
+          cache-dependency-path: |
+            apps/windows/rc003/requirements-dev.txt
+            apps/windows/rc003/requirements.txt
 
       - name: Formal release readiness (tag builds only)
         if: startsWith(github.ref, 'refs/tags/')
@@ -157,6 +177,12 @@ jobs:
         run: |
           ./build/fetch-frida-gadget.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Download Nano worker built from pinned source
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: nano-native-worker
+          path: apps/windows/rc003/.build/nano-runtime
 
       - name: Capture checked build inputs
         shell: pwsh

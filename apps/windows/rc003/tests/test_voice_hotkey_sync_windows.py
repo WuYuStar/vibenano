@@ -28,6 +28,7 @@ class VoiceHotkeyDefaultsTests(unittest.TestCase):
             voice_hotkey_sync_windows.default_hotkey("doubao_ime"), "ralt"
         )
         self.assertEqual(voice_hotkey_sync_windows.default_hotkey("custom"), "ralt")
+        self.assertEqual(voice_hotkey_sync_windows.default_hotkey("fun_asr_nano"), "")
 
     def test_removed_windows_dictation_provider_is_not_read(self):
         result = voice_hotkey_sync_windows.read_provider_hotkey(
@@ -36,6 +37,55 @@ class VoiceHotkeyDefaultsTests(unittest.TestCase):
 
         self.assertFalse(result.ok)
         self.assertEqual(result.code, "unsupported_provider")
+
+
+class FasterWhisperVoiceHotkeyTests(unittest.TestCase):
+    def test_default_provider_entry_is_an_empty_default(self):
+        self.assertEqual(
+            voice_hotkey_sync_windows.default_hotkeys_by_provider()["fun_asr_nano"],
+            {"hold": "", "source": "default"},
+        )
+
+    def test_read_is_a_local_no_hotkey_result_on_every_platform(self):
+        for platform in ("win32", "linux"):
+            for trigger in ("hold", "toggle"):
+                with self.subTest(platform=platform, trigger=trigger):
+                    result = voice_hotkey_sync_windows.read_provider_hotkey(
+                        "fun_asr_nano", platform=platform, trigger=trigger
+                    )
+                    self.assertTrue(result.ok)
+                    self.assertEqual(result.code, "no_hotkey")
+                    self.assertEqual(result.hotkey, "")
+                    self.assertIn("不需要", result.message)
+
+    def test_empty_validation_and_sync_succeed_without_windows_or_a_provider_file(self):
+        with mock.patch.object(
+            voice_hotkey_sync_windows, "_parsed_hotkey"
+        ) as parser:
+            validated = voice_hotkey_sync_windows.validate_provider_hotkey(
+                "fun_asr_nano", "  "
+            )
+            synced = voice_hotkey_sync_windows.sync_provider_hotkey(
+                "fun_asr_nano", "", platform="linux"
+            )
+
+        self.assertTrue(validated.ok)
+        self.assertEqual(validated.code, "no_hotkey")
+        self.assertEqual(validated.hotkey, "")
+        self.assertTrue(synced.ok)
+        self.assertEqual(synced.code, "no_hotkey")
+        self.assertEqual(synced.hotkey, "")
+        parser.assert_not_called()
+
+    def test_sync_defensively_rejects_any_inherited_or_manual_hotkey(self):
+        for shortcut in ("ralt", "lctrl+lshift+f9"):
+            with self.subTest(shortcut=shortcut):
+                result = voice_hotkey_sync_windows.sync_provider_hotkey(
+                    "fun_asr_nano", shortcut, platform="win32"
+                )
+                self.assertFalse(result.ok)
+                self.assertEqual(result.code, "no_hotkey")
+                self.assertEqual(result.hotkey, "")
 
 
 class ChatterflyVoiceHotkeyTests(unittest.TestCase):

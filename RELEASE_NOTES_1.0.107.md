@@ -1,0 +1,28 @@
+# VibeNano 1.0.107（预发布）
+
+由 WuYuStar 基于 ZSTDJan/windows-remote-mic-app 继续修改，Windows实现源于 Open Voice Bridge，按 GPL-3.0-only 发布。应用内名称暂沿用“无线麦”。原作者、项目沿革及第三方来源见仓库中的 COPYRIGHT、ATTRIBUTION 和 THIRD_PARTY_NOTICES。
+
+本版变化：
+
+- 本地识别统一为 Fun-ASR-Nano CPU 量化引擎，面向中英文混合语音。Whisper、Paraformer、千问旧配置自动迁移；搜狗、微信、豆包和 Chatterfly 继续保留。
+- 首次模型下载可查看进度、暂停/继续和重试。已有同账户模型缓存可复用。模型约1.28GB，单独下载，不包含在应用包中。
+- 录音时显示无文字波形，松开后改为识别动画；修复识别进程失败后无法重新尝试的问题。
+- 按键“打开程序”新增“选择应用”，可搜索本机已安装的商店应用，例如 ChatGPT；保留普通 EXE 浏览与映射。
+
+使用方法：完全退出旧版，完整解压 portable ZIP，运行根目录无线麦 EXE。不要单独复制 EXE。首次模型下载需要联网，识别在本机完成；不保存录音、不上传识别音频。模型缓存属于本机文件，不随源码发布。
+
+环境与限制：Windows x64，Nano 原生程序要求 AVX2/F16C/FMA。主要验证环境为 Windows 11；旧CPU、其它Windows版本和其它蓝牙驱动的兼容性未全面验证。软件未签名。不要通过关闭全局系统防护来处理下载提示。
+
+已完成源码回归与本机合成音检查，打包后没有进行额外运行测试；以预发布供试用，不声称所有设备均通过硬件验收。更新前保留原配置备份。
+
+公开 portable 包不附带 VB-CABLE 驱动安装包；使用外部输入法的用户请从 https://vb-audio.com/Cable/ 自行下载安装并重启。应用内的离线驱动安装入口在本发布包中不可用；Nano 本地识别不需要该驱动。
+
+附件：
+
+- `RemoteMicRC003-1.0.107-portable-unsigned.zip`：应用便携包。
+- `RemoteMicRC003-1.0.107-source.zip`：该版本源码与构建资料，包括 Nano 上游固定源码归档。
+- `SHA256SUMS.txt`：上述附件的 SHA-256，下载后可核对。
+
+Qt/PySide6 的对应源码沿用本仓库 `third-party-source-qt-6.11.1` 发布附件，准确文件和摘要见 `THIRD_PARTY_SOURCE.md`。主程序和 Nano 工作程序源码在本版本源码附件内；不要仅上传可执行文件而遗漏 source ZIP。第三方库各自的许可与通知随应用提供。
+
+当前打包程序的内置更新入口仍沿用上游仓库。请从 https://github.com/WuYuStar/vibenano/releases 手动下载 VibeNano 版本，暂不使用程序内更新来升级本分支。

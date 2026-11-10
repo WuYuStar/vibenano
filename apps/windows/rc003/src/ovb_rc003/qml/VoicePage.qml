@@ -11,8 +11,10 @@ Item {
     property var tokens
     property var backTabTarget: null
     property var tabTarget: null
-    readonly property var firstFocusItem: installVirtualAudioButton
-    readonly property var lastFocusItem: testVbCableChannelButton
+    readonly property var firstFocusItem: localSpeechSelected
+        ? openMicrophonePrivacyButton : installVirtualAudioButton
+    readonly property var lastFocusItem: localSpeechSelected
+        ? nanoThreadsCombo : testVbCableChannelButton
     property bool voiceHotkeyRecording: false
     property string voiceHotkeyCaptureError: ""
     property string pendingVoiceHotkey: ""
@@ -56,6 +58,8 @@ Item {
         SettingsController.voiceProgramDoubaoSelected
     readonly property bool chatterflySelected:
         SettingsController.voiceProgramChatterflySelected
+    readonly property bool nanoSelected: SettingsController.voiceProgramNanoSelected
+    readonly property bool localSpeechSelected: nanoSelected
     readonly property string voiceHotkeyModeLabel:
         root.chatterflySelected ? qsTr("语音输入") :
         !SettingsController.isRc003Device
@@ -75,7 +79,7 @@ Item {
         && !SettingsController.isRc003Device
         && root.voiceProgramManaged
         && !root.wetypeSelected && !root.sogouSelected && !root.doubaoSelected
-        && !root.chatterflySelected
+        && !root.chatterflySelected && !root.localSpeechSelected
     readonly property bool voiceHotkeyBusy: SettingsController.voiceHotkeyBusy
     readonly property bool voiceHotkeyRefreshVisible:
         root.sogouSelected || root.wetypeSelected || root.doubaoSelected || root.chatterflySelected
@@ -108,6 +112,7 @@ Item {
             !== (SettingsController.voiceProgramElevationStatus === "elevated")
     readonly property color voiceProgramStateColor:
         root.voiceProgramUnsupported ? tokens.disabledText
+        : root.localSpeechSelected ? tokens.voiceAccent
         : SettingsController.voiceProgramSettingsDirty
             ? tokens.voiceAccent
             : SettingsController.voiceProgramStatusCode === "running"
@@ -124,6 +129,8 @@ Item {
             return qsTr("待配置")
         if (root.voiceProgramUnsupported)
             return qsTr("尚未接通")
+        if (root.localSpeechSelected && code === "built_in_adapter")
+            return qsTr("本机识别")
         if (code === "running") {
             if (root.voiceProgramPrivilegeMismatch)
                 return qsTr("退出后点“重新检测”")
@@ -139,6 +146,39 @@ Item {
             return qsTr("点击“打开设置”")
         }
         return qsTr("正在检查")
+    }
+
+    function fasterWhisperRuntimeText() {
+        switch (String(SettingsController.voiceRuntimeState)) {
+        case "model_loading": return qsTr("正在加载/下载模型")
+        case "active":
+        case "mic_confirmed":
+        case "receiving_audio": return qsTr("录音中")
+        case "transcribing":
+        case "finishing": return qsTr("正在识别")
+        case "success": return qsTr("识别完成（文字粘贴已提交）")
+        case "audio_empty": return qsTr("未识别到文字/未收到声音")
+        case "unavailable": return qsTr("识别组件或模型不可用")
+        case "failed": return qsTr("识别失败")
+        case "busy": return qsTr("上一段仍在识别，请稍后")
+        case "text_submit_failed": return qsTr("文字输入失败（焦点变化或目标不可用）")
+        case "host_start_failed": return qsTr("无法开始本地录音")
+        case "not_tested":
+        default: return qsTr("待识别")
+        }
+    }
+
+    function fasterWhisperRuntimeColor() {
+        const state = String(SettingsController.voiceRuntimeState)
+        if (state === "success")
+            return tokens.successColor
+        if (state === "audio_empty" || state === "unavailable"
+                || state === "failed" || state === "text_submit_failed"
+                || state === "host_start_failed")
+            return tokens.errorColor
+        if (state === "not_tested")
+            return tokens.disabledText
+        return tokens.voiceAccent
     }
 
     function checkResult(checkId) {
@@ -313,8 +353,23 @@ Item {
         }
     }
 
+    Timer {
+        objectName: "modelDownloadRefreshTimer"
+        interval: 500
+        repeat: true
+        running: root.visible && root.localSpeechSelected
+        onTriggered: SettingsController.refreshModelDownloads()
+    }
+
+    onLocalSpeechSelectedChanged: {
+        SettingsController.refreshModelDownloads()
+        if (localSpeechSelected)
+            stopVoiceHotkeyCapture("local_provider_selected")
+    }
+
     onVisibleChanged: {
         if (visible) {
+            SettingsController.refreshModelDownloads()
             SettingsController.refreshVoiceProgramStatus()
             SettingsController.refreshVoiceProgramOptions()
             SettingsController.loadVoiceHotkeyFromProvider()
@@ -356,6 +411,7 @@ Item {
 
                 InlineSettingsRow {
                     objectName: "virtualAudioRow"
+                    visible: !root.localSpeechSelected
                     tokens: root.tokens
                     stateColumnWidth: root.settingsStateColumnWidth
                     actionColumnWidth: root.settingsActionColumnWidth
@@ -423,6 +479,7 @@ Item {
 
                 InlineSettingsRow {
                     objectName: "outputEndpointRow"
+                    visible: !root.localSpeechSelected
                     tokens: root.tokens
                     stateColumnWidth: root.settingsStateColumnWidth
                     actionColumnWidth: root.settingsActionColumnWidth
@@ -458,11 +515,14 @@ Item {
                     showDivider: false
 
                     CompactButton {
+                        id: openMicrophonePrivacyButton
                         objectName: "openMicrophonePrivacyButton"
                         tokens: root.tokens
                         Layout.fillWidth: true
                         text: qsTr("麦克风隐私")
                         onClicked: SettingsController.openMicrophonePrivacySettings()
+                        KeyNavigation.backtab: root.localSpeechSelected
+                            ? root.backTabTarget : null
                     }
                 }
             }
@@ -609,6 +669,8 @@ Item {
                     showDivider: root.voiceProgramManaged
                     descriptionText: SettingsController.remoteRecordingModeIndex === 0
                         ? qsTr("按住说话，松开结束")
+                        : root.localSpeechSelected
+                            ? qsTr("按一下开始，再按结束；到时停止录音")
                         : root.doubaoSelected
                             ? qsTr("按一下开始，再按结束；到时或操作键盘也会结束")
                         : root.wetypeSelected || root.sogouSelected
@@ -664,6 +726,123 @@ Item {
                 }
 
                 InlineSettingsRow {
+                    objectName: "nanoSettingsRow"
+                    visible: root.localSpeechSelected
+                    tokens: root.tokens
+                    titleText: qsTr("识别性能")
+                    editorData: [SelectionComboBox {
+                        id: nanoThreadsCombo
+                        objectName: "nanoThreadsCombo"
+                        tokens: root.tokens
+                        Layout.preferredWidth: 130
+                        model: [qsTr("1 线程"), qsTr("2 线程"), qsTr("4 线程"), qsTr("8 线程")]
+                        currentIndex: SettingsController.localSpeechThreadsIndex
+                        enabled: !root.voiceHotkeyBusy && !root.configurationWriteBusy
+                            && !SettingsController.settingsSaveBusy
+                        onActivated: function(index) {
+                            SettingsController.localSpeechThreadsIndex = index
+                            currentIndex = Qt.binding(function() { return SettingsController.localSpeechThreadsIndex })
+                        }
+                        Accessible.name: qsTr("识别 CPU 线程数")
+                        KeyNavigation.tab: root.localSpeechSelected ? root.tabTarget : null
+                    }]
+                }
+
+                UiLabel {
+                    objectName: "fasterWhisperModelNotice"
+                    visible: root.localSpeechSelected
+                    tokens: root.tokens
+                    kind: noteKind
+                    Layout.fillWidth: true
+                    Layout.leftMargin: root.tokens.spacingLarge
+                    Layout.rightMargin: root.tokens.spacingLarge
+                    Layout.topMargin: root.tokens.spacingSmall
+                    wrapMode: Text.WordWrap
+                    text: qsTr("在本机离线识别中英文：按住说话，松开后输出文字。首次加载需等待，退出会释放模型内存。")
+                }
+
+                UiLabel {
+                    visible: root.localSpeechSelected
+                    tokens: root.tokens
+                    kind: bodyKind
+                    text: qsTr("本地模型")
+                    Layout.leftMargin: root.tokens.spacingLarge
+                    Layout.topMargin: root.tokens.spacingSmall
+                }
+
+                Repeater {
+                    model: 1
+                    delegate: ColumnLayout {
+                        required property int index
+                        readonly property var modelData: SettingsController.modelDownloadItems[index]
+                            || {engine: "", title: "", size: "", message: "", state: "missing",
+                                percent: 0, busy: false, determinate: false, canCancel: false, canDownload: false}
+                        visible: root.localSpeechSelected
+                        Layout.fillWidth: true
+                        Layout.leftMargin: root.tokens.spacingLarge
+                        Layout.rightMargin: root.tokens.spacingLarge
+                        spacing: root.tokens.spacingSmall
+                        RowLayout {
+                            Layout.fillWidth: true
+                            UiLabel {
+                                tokens: root.tokens
+                                kind: bodyKind
+                                text: modelData.title + " · " + modelData.size
+                                Layout.fillWidth: true
+                                elide: Text.ElideRight
+                            }
+                            CompactButton {
+                                objectName: "downloadModel_" + modelData.engine
+                                tokens: root.tokens
+                                text: modelData.canCancel ? qsTr("暂停")
+                                    : modelData.state === "ready" ? qsTr("已下载")
+                                    : modelData.busy ? qsTr("下载中")
+                                    : modelData.state === "failed" ? qsTr("重试")
+                                    : modelData.state === "paused" ? qsTr("继续") : qsTr("下载")
+                                enabled: modelData.canCancel || modelData.canDownload
+                                onClicked: modelData.canCancel
+                                    ? SettingsController.cancelModelDownload()
+                                    : SettingsController.downloadLocalModel(modelData.engine)
+                            }
+                        }
+                        ProgressBar {
+                            objectName: "modelProgress_" + modelData.engine
+                            Layout.fillWidth: true
+                            visible: modelData.busy
+                            from: 0
+                            to: 100
+                            value: modelData.percent
+                            indeterminate: modelData.state !== "downloading" || !modelData.determinate
+                            Accessible.name: modelData.title + qsTr("当前文件下载进度")
+                        }
+                        UiLabel {
+                            tokens: root.tokens
+                            kind: noteKind
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: modelData.message + (modelData.state === "downloading"
+                                ? " · " + modelData.percent.toFixed(1) + "%" : "")
+                        }
+                    }
+                }
+
+                UiLabel {
+                    objectName: "fasterWhisperRuntimeText"
+                    visible: root.localSpeechSelected
+                        && String(SettingsController.voiceRuntimeProvider) === "fun_asr_nano"
+                    tokens: root.tokens
+                    kind: noteKind
+                    Layout.fillWidth: true
+                    Layout.leftMargin: root.tokens.spacingLarge
+                    Layout.rightMargin: root.tokens.spacingLarge
+                    Layout.topMargin: root.tokens.spacingSmall
+                    Layout.bottomMargin: root.tokens.spacingSmall
+                    wrapMode: Text.WordWrap
+                    color: root.fasterWhisperRuntimeColor()
+                    text: qsTr("识别状态：") + root.fasterWhisperRuntimeText()
+                }
+
+                InlineSettingsRow {
                     objectName: "voiceProgramCustomPathRow"
                     visible: root.customProgramSelected
                     tokens: root.tokens
@@ -701,7 +880,7 @@ Item {
 
                 InlineSettingsRow {
                     objectName: "voiceHotkeyRow"
-                    visible: root.voiceProgramManaged
+                    visible: root.voiceProgramManaged && !root.localSpeechSelected
                     tokens: root.tokens
                     showDivider: root.customProgramSelected
                     editorColumnWidth: root.voiceHotkeyEditorWidth
@@ -854,6 +1033,7 @@ Item {
 
             SectionFrame {
                 objectName: "voiceTestSection"
+                visible: !root.localSpeechSelected
                 tokens: root.tokens
                 Layout.fillWidth: true
                 horizontalPadding: 0
@@ -929,6 +1109,7 @@ Item {
 
             UiLabel {
                 objectName: "holdRecordingNote"
+                visible: !root.localSpeechSelected
                 tokens: root.tokens
                 kind: noteKind
                 Layout.fillWidth: true

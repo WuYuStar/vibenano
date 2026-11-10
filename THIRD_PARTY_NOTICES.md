@@ -6,9 +6,48 @@ with the installer and portable archive are under `THIRD_PARTY_LICENSES/`.
 Corresponding-source information for Qt for Python is recorded in
 `THIRD_PARTY_SOURCE.md`.
 
+## 1.0.107 public release packaging
+
+The public release ZIP excludes the VB-CABLE installer. Historical build and
+local-use bundles may contain its unmodified Basic ZIP; those are not the public
+release artifact. Users obtain VB-CABLE directly from https://vb-audio.com/Cable/.
+The vendor package readme permits unchanged copying but restricts integration
+into other installation procedures; the vendor's current distribution terms at
+https://shop.vb-audio.com/en/content/3-Terms-of-use describe distributor licensing.
+This project does not assume a blanket redistribution grant from "Donationware".
+
+Nano fixed upstream source archives, the modified worker, build recipe, patches
+and complete Apache/MIT/compiler-runtime notices accompany the 1.0.107 source
+release. Their exact hashes are recorded in build/nano/native-build.json.
+
+## RC003 1.0.107 source configuration
+
+The local speech engine is now exclusively Fun-ASR-Nano, with the existing
+CPU-native runtime and separately downloaded GGUF model. Retired Whisper,
+Paraformer and Qwen Python engines are excluded from the new build definition.
+Their historical notices below remain for earlier distributions; this source
+change neither removes installed packages nor produces a new binary release.
+
+### HTTPS model downloads and cache locking
+
+- Package: `requests==2.34.2`; license: Apache-2.0.
+  Existing license and NOTICE:
+  `THIRD_PARTY_LICENSES/runtime-1.0.104/requests-2.34.2/requests-2.34.2.dist-info/licenses/`.
+- Package: `filelock==4.2.9`; license: MIT.
+  Existing license:
+  `THIRD_PARTY_LICENSES/runtime-1.0.104/filelock-4.2.9/filelock-4.2.9.dist-info/licenses/LICENSE`.
+
+These lightweight dependencies handle HTTPS transfers and shared-cache locking;
+no Python machine-learning framework is required for Nano recognition.
+
 ## Frozen Python and audio runtime
 
-### CPython 3.12.10
+The 1.0.104 candidate uses the supplied CPython 3.12.14 runtime. Its OpenSSL
+pair is taken from that interpreter's DLL directory, avoiding identically named
+libraries on unrelated applications' PATHs. Its SSLContext policy PEM is
+preserved with the runtime data; TLS verification is not disabled.
+
+### CPython 3.12.10 (historical); 3.12.14 in the 1.0.104 candidate
 
 - Project: CPython
 - Source: <https://www.python.org/downloads/source/>
@@ -53,6 +92,120 @@ recorded in `THIRD_PARTY_SOURCE.md`.
 
 PyInstaller also preserves NumPy's complete package license tree under
 `程序文件/numpy-2.4.3.dist-info/licenses/` in current frozen applications.
+
+### faster-whisper
+
+- Package: `faster-whisper==1.2.1`
+- Source: <https://github.com/SYSTRAN/faster-whisper/tree/v1.2.1>
+- License: MIT
+- Distributed form: Python modules and package metadata in the frozen local
+  speech provider
+- License text: `THIRD_PARTY_LICENSES/faster-whisper-1.2.1/LICENSE.txt`
+
+### CTranslate2
+
+- Package: `ctranslate2==4.8.5`
+- Source: <https://github.com/OpenNMT/CTranslate2/tree/v4.8.5>
+- License: MIT
+- Distributed form: Python modules, the native Python extension, and native DLLs
+  shipped by the pinned Windows x64 wheel
+- License text: `THIRD_PARTY_LICENSES/ctranslate2-4.8.5/LICENSE.txt`
+
+### Hugging Face Tokenizers
+
+- Package: `tokenizers==0.23.3`
+- Source: <https://github.com/huggingface/tokenizers/tree/v0.23.3>
+- License: Apache License 2.0
+- Distributed form: Python modules and the native tokenizer extension
+- License text: `THIRD_PARTY_LICENSES/tokenizers-0.23.3/LICENSE.txt`
+
+### ONNX Runtime
+
+- Package: `onnxruntime==1.31.1`
+- Source: <https://github.com/microsoft/onnxruntime/tree/v1.31.1>
+- License: MIT
+- Distributed form: Python modules, the native Python extension, runtime and
+  provider DLLs, and package notices from the pinned Windows x64 wheel
+- License text: `THIRD_PARTY_LICENSES/onnxruntime-1.31.1/LICENSE.txt`
+
+ONNX Runtime remains required when `faster_whisper` is imported even though this
+application supplies a NumPy PCM array and disables faster-whisper's VAD filter.
+
+### PyAV
+
+- Package: `av==19.0.2`
+- Source: <https://github.com/PyAV-Org/PyAV/tree/v19.0.2>
+- License: BSD-3-Clause
+- Distributed form: Python modules, native Python extensions, and the sibling
+  `av.libs` native codec/runtime DLL payload from the pinned Windows x64 wheel
+- License text: `THIRD_PARTY_LICENSES/av-19.0.2/LICENSE.txt`
+
+PyAV remains required when `faster_whisper` is imported; using direct NumPy PCM
+does not remove that module-import dependency.
+
+### Hugging Face Hub
+
+- Package: `huggingface-hub==0.36.2`
+- Source: <https://github.com/huggingface/huggingface_hub/tree/v0.36.2>
+- License: Apache License 2.0
+- Distributed form: Python modules and package metadata used for first-use model
+  download and subsequent cached model loading
+- License text: `THIRD_PARTY_LICENSES/huggingface-hub-0.36.2/LICENSE.txt`
+
+The six direct speech packages resolve additional Python dependencies, and some
+native wheels redistribute additional runtime or codec libraries, including
+PyAV's `av.libs` payload. The final frozen Windows artifact, including its
+package metadata and native-library directories, is the source of truth for the
+exact transitive closure actually distributed; this direct-pin list is not an
+exhaustive transitive inventory.
+
+### Separately downloaded faster-whisper models
+
+No Whisper model weights or model-repository snapshots are committed to this
+repository or bundled into the frozen application. On first use, the selected
+`tiny`, `base`, or `small` model is downloaded as user data beneath the
+application configuration root in `models/faster-whisper`; later runs can load
+the cached copy without another download.
+
+The corresponding Systran model repositories and cards declare the MIT license:
+
+- <https://huggingface.co/Systran/faster-whisper-tiny>
+- <https://huggingface.co/Systran/faster-whisper-base>
+- <https://huggingface.co/Systran/faster-whisper-small>
+
+Those cards identify the original OpenAI Whisper models and their model cards as
+additional provenance. Downloaded models remain separate from the package and
+native-library notices above.
+
+### Paraformer and model download runtime (1.0.104 candidate)
+
+The packaged application includes both local recognition engines; native
+models are imported only inside the selected recognition child process.
+Model weights remain separately downloaded user data. The 1.0.104 candidate
+adds these direct pins from `requirements-paraformer.txt`:
+
+- `funasr==1.3.1` — MIT; <https://github.com/modelscope/FunASR>
+- `torch==2.9.1+cpu` — BSD-3-Clause with bundled third-party components;
+  <https://github.com/pytorch/pytorch>
+- `torchaudio==2.9.1+cpu` — its wheel's BSD-style license;
+  <https://github.com/pytorch/audio>
+- `modelscope==1.40.2` and `modelscope-hub==0.6.1` — Apache-2.0;
+  <https://github.com/modelscope/modelscope>
+- `librosa==1.0.0` — ISC; <https://github.com/librosa/librosa>
+- `kaldiio==2.18.1` — MIT; <https://github.com/nttcslab-sp/kaldiio>
+
+The runtime dependency closure (85 installed distributions) and 134 license,
+notice and copyright files extracted from their wheels are preserved under
+`THIRD_PARTY_LICENSES/runtime-1.0.104/`, with exact versions and source metadata
+in `inventory.json`. This supplements the existing notices, including the
+PyInstaller bootloader license exception. Model downloads use the same caches
+for the settings buttons and automatic first use; they do not upload audio.
+
+The separate Paraformer checkpoint, pinned at revision `v2.0.4`, is:
+<https://modelscope.cn/models/iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online>.
+Its model card and <https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE>
+describe model terms separately from FunASR's code license. Weights are not
+committed or included in the portable application.
 
 ### python-sounddevice and PortAudio
 
@@ -213,3 +366,13 @@ its Donationware model.
 The frozen Windows application may include Microsoft Universal C Runtime and
 Visual C++ runtime DLLs redistributed under Microsoft's applicable runtime
 terms. They are not part of this project's GPL source code.
+
+## Fun-ASR-Nano CPU runtime（RC003 1.0.105 local test）
+
+Fun-ASR-Nano model/GGUF artifacts and the Fun-ASR CPU runtime originate from [QwenAudio/Fun-ASR](https://github.com/QwenAudio/Fun-ASR) / [FunAudioLLM/Fun-ASR-Nano-GGUF](https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-GGUF), licensed under Apache-2.0. llama.cpp/ggml are under MIT. The native test runtime adapts the upstream CLI to a bounded anonymous-pipe protocol with in-memory audio, persistent model reuse and configurable CPU threads. Source revision, patches, build recipe and third-party notices are in `apps/windows/rc003/build/nano/`; the corresponding source archive includes exact upstream source archives. MinGW compiler runtime use is subject to its notices and applicable GCC Runtime Library Exception. No upstream endorsements are implied.
+
+Model weights are separately downloaded and SHA-256 verified. They are not bundled in the portable ZIP. Hotword editing is not implemented in this local test build. Whisper/Paraformer retain their original notices and behavior.
+
+## Qwen3-ASR-0.6B 源码测试依赖（RC003 1.0.106）
+
+Qwen3-ASR模型与Transformers实现见 https://huggingface.co/Qwen/Qwen3-ASR-0.6B-hf 和 https://github.com/huggingface/transformers ，按各自Apache-2.0许可使用。模型固定revision和各文件校验标识保存在`model_downloads.py`。新版Transformers/Hub/tokenizers/safetensors及其依赖仅安装到独立源码测试目录，未替换既有引擎依赖。该目录内各发行包的dist-info中保留原有LICENSE/NOTICE；本轮不制作或交付新的应用包。CPU推理复用已有CPU版PyTorch，其既有许可通知继续适用。

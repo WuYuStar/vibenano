@@ -9,13 +9,13 @@ param(
 $ErrorActionPreference = "Stop"
 $templateRoot = Split-Path -Parent $PSScriptRoot
 $windowsRoot = Split-Path -Parent $templateRoot
-$repositoryRoot = Resolve-Path (Join-Path $windowsRoot "..\..")
-$sourceRoot = Resolve-Path (Join-Path $windowsRoot "rc003\scripts")
-$testRoot = Resolve-Path (Join-Path $windowsRoot "rc003\tests")
+$repositoryRoot = [System.IO.Path]::GetFullPath((Resolve-Path (Join-Path $windowsRoot "..\..")).ProviderPath)
+$sourceRoot = [System.IO.Path]::GetFullPath((Resolve-Path (Join-Path $windowsRoot "rc003\scripts")).ProviderPath)
+$testRoot = [System.IO.Path]::GetFullPath((Resolve-Path (Join-Path $windowsRoot "rc003\tests")).ProviderPath)
 $destinationPath = if ([System.IO.Path]::IsPathRooted($Destination)) {
     [System.IO.Path]::GetFullPath($Destination)
 } else {
-    [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $Destination))
+    [System.IO.Path]::GetFullPath((Join-Path $PWD.ProviderPath $Destination))
 }
 
 # GetFullPath alone does not expand short names or resolve directory junctions.
@@ -189,8 +189,14 @@ Copy-Item -LiteralPath (
     Join-Path $testRoot "test_element_navigation_prototype.py"
 ) -Destination $destinationTests
 
-$commit = (& git -C $repositoryRoot rev-parse HEAD 2>$null)
-if ($LASTEXITCODE -ne 0) {
+try {
+    # Trust only this explicit source root for a read-only provenance query;
+    # Windows and WSL can report different owners for the same checkout.
+    $commit = (& git -c "safe.directory=$repositoryRoot" -C $repositoryRoot rev-parse HEAD 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+        $commit = "unknown"
+    }
+} catch {
     $commit = "unknown"
 }
 $snapshotFiles = foreach ($name in $sourceFiles) {

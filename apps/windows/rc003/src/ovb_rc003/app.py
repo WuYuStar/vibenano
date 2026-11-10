@@ -78,6 +78,8 @@ from . import (
     doubao_rpc,
     element_navigation_control_windows,
     element_navigation_runtime,
+    local_speech_core,
+    local_speech_provider,
     frida_compat,
     hid_identity,
     hotkey,
@@ -106,6 +108,7 @@ from .voice_shortcut_session import (
     _VOICE_HOTKEY_BACKEND_CHATTERFLY,
     _VOICE_HOTKEY_BACKEND_WETYPE,
     _VOICE_HOTKEY_BACKEND_DOUBAO,
+    _VOICE_HOTKEY_BACKEND_LOCAL,
     _INPUT_PROFILE_VOICE_HOTKEY_BACKENDS
 )
 
@@ -355,6 +358,18 @@ class RC003App:
         )
         self._voice_pcm_min_arrival_sequence: Optional[int] = None
         self._button_action_lock = threading.RLock()
+        # Local recognition is lazy: no worker/model exists until this provider
+        # is actually used. Attempt fields are protected by _voice_shortcut.lock;
+        # status ownership has its own lock for callbacks from the ASR worker.
+        self._local_voice_lock = threading.RLock()
+        self._local_whisper_runtime = None
+        self._local_whisper_status_owner = None
+        self._local_voice_capture = None
+        self._local_voice_owner = None
+        self._local_voice_target = None
+        self._local_voice_settings = None
+        self._local_voice_release_seen = False
+        self._local_voice_submitted = False
         self._button_key_release_pending: Optional[Tuple[str, ...]] = None
         self._button_mouse_release_pending: Optional[str] = None
         self._button_mouse_holds: Dict[str, set[object]] = {}
@@ -521,11 +536,202 @@ class RC003App:
             set_result=lambda *args, **kw: self._set_runtime_voice_result(*args, **kw),
             wait_sogou=lambda: self._wait_for_sogou_voice_process(),
             disable_forwarding=lambda: setattr(self, "_voice_pcm_forwarding_enabled", False),
+            local_runtime=self._get_local_whisper_runtime,
+            local_claim=self._claim_local_voice_owner,
+            local_cancel=self._cancel_local_voice_owner,
+            capture_text_target=win32_input.capture_text_target,
         ))
 
     def _current_voice_runtime_state(self):
         with self._runtime_status_lock:
             return self._runtime_voice_state
+
+    def _local_voice_selected(self) -> bool:
+        return (
+            voice_program_manager.normalize_voice_program_settings(
+                self._config.get("voice_program")
+            )["provider"]
+            in voice_program_manager.LOCAL_VOICE_PROVIDERS
+        )
+
+    def _get_local_whisper_runtime(self):
+        with self._local_voice_lock:
+            if self._local_whisper_runtime is None:
+                self._local_whisper_runtime = local_speech_provider.LocalSpeechRuntime(
+                    local_speech_provider.model_cache_root(self._config_root / "models", local_speech_provider.NANO),
+                    engine=local_speech_provider.NANO,
+                    delivery_lock=self._button_action_lock,
+                    on_status=self._on_local_whisper_status,
+                    on_text=self._on_local_whisper_text,
+                    logger=self._logger,
+                )
+            return self._local_whisper_runtime
+
+    def _claim_local_voice_owner(self, owner) -> None:
+        with self._local_voice_lock:
+            previous = self._local_whisper_status_owner
+            runtime = self._local_whisper_runtime
+            self._local_whisper_status_owner = owner
+        if previous is not None and previous is not owner and runtime is not None:
+            runtime.cancel(previous)
+
+    def _cancel_local_voice_owner(self, owner) -> None:
+        with self._local_voice_lock:
+            runtime = self._local_whisper_runtime
+            if self._local_whisper_status_owner is owner:
+                self._local_whisper_status_owner = None
+        if runtime is not None:
+            # This is a delivery barrier: after it returns, this attempt cannot
+            # begin a late paste even if native inference is still finishing.
+            runtime.cancel(owner)
+
+    def _on_local_whisper_status(self, owner, state: str) -> None:
+        with self._local_voice_lock:
+            if self._local_whisper_status_owner is not owner:
+                return
+        # Engine states intentionally use the existing runtime-status string
+        # field. No transcript, path, model exception or audio reaches status.
+        self._set_runtime_voice_result(
+            state,
+            provider=self._config.get("voice_program", {}).get("provider", "fun_asr_nano"),
+        )
+
+    def _on_local_whisper_text(self, owner, text: str, target) -> bool:
+        # Serialize with ordinary mapped text so clipboard/Ctrl+V and any owed
+        # key-up use the same safety owner. The target was captured at mic start.
+        with self._button_action_lock:
+            with self._local_voice_lock:
+                if self._local_whisper_status_owner is not owner:
+                    return False
+            if not self._accept_input_events or not self._local_voice_selected():
+                return False
+            action = key_mapping.ButtonAction(key_mapping.ActionKind.TEXT, text=text)
+            return self._apply_button_action_locked(
+                action,
+                expected_target=target,
+            ) is True
+
+    def _cancel_local_voice_on_provider_change(self, before, after) -> None:
+        old_provider = voice_program_manager.normalize_voice_program_settings(
+            before.get("voice_program")
+        )["provider"]
+        new_provider = voice_program_manager.normalize_voice_program_settings(
+            after.get("voice_program")
+        )["provider"]
+        if old_provider == new_provider:
+            return
+        with self._local_voice_lock:
+            owner = self._local_whisper_status_owner
+        if owner is not None:
+            self._cancel_local_voice_owner(owner)
+        with self._local_voice_lock:
+            runtime, self._local_whisper_runtime = self._local_whisper_runtime, None
+        if runtime is not None:
+            runtime.close(timeout=5.0)
+
+    def _cancel_local_voice_capture_locked(self) -> None:
+        capture = self._local_voice_capture
+        owner = self._local_voice_owner
+        self._local_voice_capture = None
+        self._local_voice_owner = None
+        self._local_voice_target = None
+        self._local_voice_settings = None
+        self._local_voice_release_seen = False
+        self._local_voice_submitted = False
+        if capture is not None:
+            capture.cancel()
+        with self._local_voice_lock:
+            status_owner = self._local_whisper_status_owner
+        for item in {id(owner): owner, id(status_owner): status_owner}.values():
+            if item is not None:
+                self._cancel_local_voice_owner(item)
+
+    def _begin_local_voice_capture_locked(self) -> bool:
+        self._cancel_local_voice_capture_locked()
+        try:
+            target = win32_input.capture_text_target()
+            capture = local_speech_core.PcmCapture(
+                max_seconds=_VOICE_HOLD_SAFETY_SECONDS
+            )
+            settings = local_speech_provider.normalize_settings(
+                self._config.get("voice_program")
+            )
+        except Exception as exc:
+            self._logger.warning(
+                "local voice capture could not start: error_type=%s",
+                type(exc).__name__,
+            )
+            self._set_runtime_voice_result(
+                bridge_runtime_status.VOICE_RUNTIME_HOST_START_FAILED,
+                provider=self._config.get("voice_program", {}).get("provider", "fun_asr_nano"),
+            )
+            return False
+        owner = object()
+        self._local_voice_capture = capture
+        self._local_voice_owner = owner
+        self._local_voice_target = target
+        self._local_voice_settings = settings
+        self._local_voice_release_seen = False
+        self._local_voice_submitted = False
+        self._claim_local_voice_owner(owner)
+        return True
+
+    def _capture_local_voice_pcm_locked(self, samples) -> None:
+        capture = self._local_voice_capture
+        if capture is None or self._local_voice_submitted:
+            return
+        try:
+            accepted = capture.append(
+                local_speech_core.pcm_bytes_from_samples(samples)
+            )
+        except Exception:
+            accepted = False
+        if not accepted:
+            self._set_runtime_voice_result(
+                local_speech_core.STATE_FAILED,
+                provider=self._config.get("voice_program", {}).get("provider", "fun_asr_nano"),
+            )
+            self._force_voice_hold_release_locked(
+                "local PCM capture failed; recording cancelled"
+            )
+            return
+        self._voice_audio.stats.add(samples)
+        if self._voice_audio.stats.frames == 1:
+            self._on_voice_audio_first_frame()
+
+    def _finish_local_voice_capture_locked(self) -> bool:
+        capture = self._local_voice_capture
+        owner = self._local_voice_owner
+        if capture is None or owner is None or self._local_voice_submitted:
+            return False
+        self._local_voice_submitted = True
+        self._set_runtime_voice_active(False)
+        self._set_runtime_voice_result(bridge_runtime_status.VOICE_RUNTIME_FINISHING)
+        pcm = capture.finish()
+        settings = self._local_voice_settings
+        target = self._local_voice_target
+        self._local_voice_capture = None
+        self._local_voice_owner = None
+        self._local_voice_target = None
+        self._local_voice_settings = None
+        self._local_voice_release_seen = False
+        return self._get_local_whisper_runtime().submit(
+            owner,
+            pcm,
+            settings,
+            target,
+        )
+
+    def _release_local_voice_capture_locked(self) -> None:
+        if self._local_voice_capture is None or self._local_voice_submitted:
+            return
+        self._local_voice_release_seen = True
+        self._set_runtime_voice_active(False)
+        self._set_runtime_voice_result(bridge_runtime_status.VOICE_RUNTIME_FINISHING)
+        # BLE drains earlier audio before AUDIO_STOP. Keep the capture open
+        # after physical release so the final tail is not truncated.
+        if not self._voice_audio_stream_active:
+            self._finish_local_voice_capture_locked()
 
     def _on_voice_audio_first_frame(self):
         with self._runtime_status_lock:
@@ -609,6 +815,12 @@ class RC003App:
                 if self._remote_profile != remote_selection.CHROMECAST_PROFILE:
                     self._stop_input_channels()
             finally:
+                local_runtime = self._local_whisper_runtime
+                if local_runtime is not None:
+                    # No late transcription may paste after application shutdown.
+                    # A timeout still leaves the runtime logically closed even if
+                    # native inference needs longer to wind down in its daemon.
+                    local_runtime.close(timeout=5.0)
                 element_navigation_runtime.clear_diagnostic_trace(self._diagnostic_trace)
                 self._diagnostic_trace.close()
                 heartbeat.cancel()
@@ -3045,6 +3257,7 @@ class RC003App:
                 self._voice_audio_stop_processed = False
                 self._voice_pcm_forwarding_enabled = False
                 self._voice_pcm_min_arrival_sequence = None
+                self._cancel_local_voice_capture_locked()
                 if not doubao_cleanup_running:
                     flush_result = self._voice_audio.flush("cleanup")
                     if not flush_result.completed:
@@ -3259,6 +3472,8 @@ class RC003App:
             return _VOICE_HOTKEY_BACKEND_DOUBAO
         if settings["provider"] == voice_program_manager.VOICE_PROGRAM_CHATTERFLY:
             return _VOICE_HOTKEY_BACKEND_CHATTERFLY
+        if settings["provider"] in voice_program_manager.LOCAL_VOICE_PROVIDERS:
+            return _VOICE_HOTKEY_BACKEND_LOCAL
         return _VOICE_HOTKEY_BACKEND_MARKED
 
     def _ensure_voice_key_physicalizer_for_hotkey(
@@ -3332,7 +3547,11 @@ class RC003App:
             return False
         mode = key_mapping.VoiceTriggerMode.HOLD
         backend = self._configured_voice_hotkey_backend()
-        if backend in {_VOICE_HOTKEY_BACKEND_WETYPE, _VOICE_HOTKEY_BACKEND_CHATTERFLY}:
+        if backend in {
+            _VOICE_HOTKEY_BACKEND_WETYPE,
+            _VOICE_HOTKEY_BACKEND_CHATTERFLY,
+            _VOICE_HOTKEY_BACKEND_LOCAL,
+        }:
             return True
         try:
             voice_hotkey = hotkey.HotkeySpec.parse(
@@ -3473,6 +3692,10 @@ class RC003App:
         self._voice_audio_start_fallback_pending = False
         self._voice_mic_gesture_sources_down.clear()
         self._voice_mic_gesture_hid_released = True
+        if self._local_voice_selected():
+            # Watchdogs, tracking loss and forced cleanup discard audio rather
+            # than recognizing a truncated or unowned utterance.
+            self._cancel_local_voice_capture_locked()
 
         doubao_attempt = self._active_doubao_attempt_locked()
         action = self._voice_shortcut.controller.reset()
@@ -3591,12 +3814,20 @@ class RC003App:
             return accepted
         if self._voice_shortcut.apply(action):
             self._cancel_voice_hold_watchdog_locked()
-            self._logger.info("voice hold hotkey released on %s", reason)
+            local_mode = self._local_voice_selected()
+            if local_mode:
+                self._release_local_voice_capture_locked()
+            self._logger.info(
+                "voice hold %s on %s",
+                "local capture released" if local_mode else "hotkey released",
+                reason,
+            )
             if not self._voice_audio_stream_active:
                 self._set_runtime_voice_active(False)
-                self._set_runtime_voice_result(
-                    bridge_runtime_status.VOICE_RUNTIME_AUDIO_EMPTY
-                )
+                if not local_mode:
+                    self._set_runtime_voice_result(
+                        bridge_runtime_status.VOICE_RUNTIME_AUDIO_EMPTY
+                    )
                 self._log_voice_submission_observation()
                 self._finish_voice_diagnostic_attempt(
                     "unknown",
@@ -3975,6 +4206,10 @@ class RC003App:
         if not self._voice_settings_idle_locked():
             return
         if self._pending_config is not None:
+            self._cancel_local_voice_on_provider_change(
+                self._config,
+                self._pending_config,
+            )
             self._config = self._pending_config
             self._pending_config = None
         if self._pending_voice_settings is not None:
@@ -4046,6 +4281,10 @@ class RC003App:
                     self._voice_shortcut.hotkey.serialize(),
                 )
                 if self._voice_settings_idle_locked():
+                    self._cancel_local_voice_on_provider_change(
+                        self._config,
+                        refreshed_config,
+                    )
                     self._config = refreshed_config
                     self._pending_config = None
                     self._pending_voice_settings = None
@@ -4719,11 +4958,19 @@ class RC003App:
         else:
             self._apply_button_action(action)
 
-    def _apply_button_action(self, action: key_mapping.ButtonAction) -> None:
+    def _apply_button_action(self, action: key_mapping.ButtonAction, *, expected_target=None):
         with self._button_action_lock:
-            self._apply_button_action_locked(action)
+            return self._apply_button_action_locked(
+                action,
+                expected_target=expected_target,
+            )
 
-    def _apply_button_action_locked(self, action: key_mapping.ButtonAction) -> None:
+    def _apply_button_action_locked(
+        self,
+        action: key_mapping.ButtonAction,
+        *,
+        expected_target=None,
+    ):
         if (
             self._button_key_release_pending is not None
             or self._button_mouse_release_pending is not None
@@ -4753,7 +5000,10 @@ class RC003App:
             elif action.kind == key_mapping.ActionKind.TEXT:
                 if not self._accept_input_events:
                     return
-                win32_input.paste_text(action.text)
+                win32_input.paste_text(
+                    action.text,
+                    expected_target=expected_target,
+                )
             elif action.kind == key_mapping.ActionKind.ESCAPE:
                 win32_input.send_escape()
             elif action.kind == key_mapping.ActionKind.RETURN:
@@ -4864,6 +5114,7 @@ class RC003App:
                 error_type=action_error_type,
             )
             self._diagnostic_trace.set_current_action(None)
+        return action_success
 
     @staticmethod
     def _button_action_key_tokens(
@@ -5216,6 +5467,7 @@ class RC003App:
                     self._logger.info("voice duplicate audio stop ignored")
                     return
                 runtime_voice_was_active = self._runtime_voice_active
+                local_mode = self._local_voice_selected()
                 self._doubao_session.cancel_current()
                 self._voice_audio_stream_active = False
                 self._voice_audio_stop_processed = True
@@ -5224,7 +5476,7 @@ class RC003App:
                 self._set_runtime_voice_active(False)
                 doubao_attempt = self._active_doubao_attempt_locked()
                 defer_doubao_diagnostic = doubao_attempt is not None
-                if doubao_attempt is None:
+                if doubao_attempt is None and not local_mode:
                     flush_result = self._voice_audio.flush("audio stop")
                     if flush_result.error is not None:
                         self._logger.error(
@@ -5312,7 +5564,12 @@ class RC003App:
                         and not self._voice_mic_gesture_sources_down
                     ):
                         self._finish_voice_mic_gesture()
-                if runtime_voice_was_active:
+                if local_mode:
+                    if action is None or action_applied:
+                        self._finish_local_voice_capture_locked()
+                    else:
+                        self._cancel_local_voice_capture_locked()
+                if runtime_voice_was_active and not local_mode:
                     wetype_result_recorded = self._voice_shortcut.record_audio_result(
                         int(stats["frames"])
                     )
@@ -5330,7 +5587,9 @@ class RC003App:
                         self._set_runtime_voice_result(
                             bridge_runtime_status.VOICE_RUNTIME_AUDIO_EMPTY
                         )
-                observation = self._log_voice_submission_observation()
+                observation = (
+                    None if local_mode else self._log_voice_submission_observation()
+                )
                 text_changed = bool(
                     observation is not None
                     and observation.text_delta is not None
@@ -5942,9 +6201,13 @@ class RC003App:
         *,
         send_device_open: bool = True,
     ) -> bool:
-        """Resolve and open the user-selected output endpoint FIRST; only
+        """Prepare the selected provider before opening the remote microphone.
+
+        External providers resolve their output endpoint FIRST; only
         send the hotkey if that succeeds, and only send MIC_OPEN if the
-        hotkey itself fully delivered. This is the fail-closed ordering
+        hotkey itself fully delivered. Local recognition instead binds its
+        PCM capture and text target and sends no hotkey. The external path's
+        fail-closed ordering
         XRBM-014 review RETRY P1 #3 (endpoint) and review round 2 P1 #6
         (hotkey) both require: a device streaming audio into Windows
         without the configured hotkey having actually engaged voice typing
@@ -5998,8 +6261,15 @@ class RC003App:
                 send_device_open=send_device_open
             )
 
+        local_mode = self._local_voice_selected()
         self._voice_pcm_min_arrival_sequence = None
-        if not self._voice_audio.open():
+        if local_mode:
+            if not self._begin_local_voice_capture_locked():
+                self._finish_voice_diagnostic_attempt(
+                    "failed_before_send", reason="local_capture_start_failed"
+                )
+                return False
+        elif not self._voice_audio.open():
             self._voice_pcm_forwarding_enabled = False
             self._set_runtime_voice_result(
                 bridge_runtime_status.VOICE_RUNTIME_OUTPUT_OPEN_FAILED
@@ -6012,7 +6282,7 @@ class RC003App:
             )
             return False
 
-        if not self._wait_for_sogou_voice_process():
+        if not local_mode and not self._wait_for_sogou_voice_process():
             self._voice_pcm_forwarding_enabled = False
             self._set_runtime_voice_result(
                 bridge_runtime_status.VOICE_RUNTIME_HOST_START_FAILED
@@ -6031,6 +6301,8 @@ class RC003App:
         action = self._voice_shortcut.controller.on_mic_button_pressed()
         action_delivered = self._voice_shortcut.apply(action)
         if not action_delivered:
+            if local_mode:
+                self._cancel_local_voice_capture_locked()
             self._voice_focus_before = None
             self._voice_focus_provider = ""
             self._voice_focus_submit_method = ""
@@ -6058,9 +6330,9 @@ class RC003App:
                 return False
             return True  # The owned IPC observer, not the acknowledgement, enables PCM.
 
-        self._voice_pcm_forwarding_enabled = True
+        self._voice_pcm_forwarding_enabled = not local_mode
         self._diagnostic_trace.emit(
-            "hotkey_sent",
+            "local_voice_started" if local_mode else "hotkey_sent",
             **self._diagnostic_trace.current_context(),
             backend=self._configured_voice_hotkey_backend(),
         )
@@ -6081,6 +6353,8 @@ class RC003App:
         self._voice_audio_start_fallback_pending = False
         self._voice_raw_input_trigger_pending = False
         self._voice_pcm_forwarding_enabled = False
+        if self._local_voice_selected():
+            self._cancel_local_voice_capture_locked()
         self._set_runtime_voice_active(False)
         flush_result = self._voice_audio.flush(reason)
         if flush_result.error is not None:
@@ -6314,6 +6588,11 @@ class RC003App:
                     arrival_sequence=int(_arrival_sequence),
                     readiness_watermark=int(cutoff),
                 )
+            if self._local_voice_selected():
+                if not self._accepts_ble_callback(_ble_generation) or arrived_before_ready:
+                    return
+                self._capture_local_voice_pcm_locked(samples)
+                return
             if (
                 sink is None
                 or not self._accepts_ble_callback(_ble_generation)

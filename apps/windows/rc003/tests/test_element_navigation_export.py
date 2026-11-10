@@ -3,6 +3,7 @@ import ctypes
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -20,7 +21,7 @@ class ElementNavigationExportTests(unittest.TestCase):
                    "-File", str(script), "-Destination", str(destination)]
         if force:
             command.append("-Force")
-        return subprocess.run(command, capture_output=True, text=True, timeout=30)
+        return subprocess.run(command, capture_output=True, text=True, encoding="oem" if sys.platform == "win32" else "utf-8", timeout=30)
 
     def isolated_repository(self, root):
         repository = root / "Source repository"
@@ -172,6 +173,7 @@ class ElementNavigationExportTests(unittest.TestCase):
                 cwd=TEMPLATE_ROOT,
                 capture_output=True,
                 text=True,
+                encoding="oem" if sys.platform == "win32" else "utf-8",
             )
 
             snapshot = json.loads(

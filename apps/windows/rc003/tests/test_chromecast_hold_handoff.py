@@ -275,6 +275,33 @@ class HoldHandoffIntegrationTests(unittest.TestCase):
         self.notify(RELEASE, 2.245)
         self.notify(NEXT, 2.245)
 
+    def test_local_hold_release_submits_real_decoder_pcm_without_output(self):
+        self.owner._config["voice_program"] = {"provider": "faster_whisper"}
+        self.notify(START, 1)
+        self.pump()
+        self.assertEqual(self.receiver.gate.state, "recording")
+        self.owner._voice_audio.open.assert_not_called()
+        self.owner._voice_shortcut.apply.assert_not_called()
+
+        self.notify(bytes([0x11]) * 160, 1.2, "audio")
+        self.pump()
+        self.assertGreater(self.owner._voice_audio.stats.samples, 0)
+        self.local_runtime.submit.assert_not_called()
+        self.notify(RELEASE, 2)
+        self.pump()
+        self.now = 2.4
+        asyncio.run(self.receiver.tick())
+        self.pump()
+
+        self.assertEqual(self.receiver.gate.state, "idle")
+        self.assertTrue(self.host.closed)
+        self.local_runtime.submit.assert_called_once()
+        self.assertTrue(self.local_runtime.submit.call_args.args[1])
+        self.local_cancel.assert_not_called()
+        self.owner._voice_audio.open.assert_not_called()
+        self.owner._voice_audio.flush.assert_not_called()
+        self.owner._voice_shortcut.apply.assert_not_called()
+
     def test_two_rounds_forward_new_audio_only_after_old_host_closes(self):
         self.first_recording()
         # Two actual 160-byte ADPCM frames split across the cleanup boundary.

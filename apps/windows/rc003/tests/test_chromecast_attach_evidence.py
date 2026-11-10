@@ -24,6 +24,30 @@ from ovb_rc003 import log_export
 
 
 class AttachEvidenceTests(unittest.TestCase):
+    def test_existing_helper_versions_do_not_hide_the_temporary_agent_sample(self):
+        helpers = [Path('program-files/Frida') / name / 'frida-agent.dll'
+                   for name in ('older', 'newer')]
+        ordinary = Path('owned-temp/frida-test/x86_64/frida-agent.dll')
+        candidates = {path: (100, 1) for path in [*helpers, ordinary]}
+        diagnostic = native.AttachEvidence(123, lambda *_args, **_kwargs: None)
+        diagnostic.before = dict(candidates)
+        diagnostic._query = lambda _step, fn: fn()
+        diagnostic.file_access = lambda *_args, **_kwargs: {}
+        with mock.patch.dict(os.environ, {'ProgramFiles': 'program-files'}), \
+                mock.patch.object(native, 'agent_candidates', return_value=(candidates, {})), \
+                mock.patch.object(native, 'agent_file', return_value={}) as inspect:
+            details = diagnostic._assets_after()
+            sampled = [call.args[0] for call in inspect.call_args_list]
+            self.assertEqual(len(sampled), 2)
+            self.assertIn(ordinary, sampled)
+            self.assertIn(helpers[0], sampled)
+            self.assertEqual(details['omitted_candidates'], 1)
+            # A genuinely changed file keeps priority over old representatives.
+            diagnostic.before[helpers[1]] = (99, 0)
+            inspect.reset_mock()
+            diagnostic._assets_after()
+            self.assertEqual([call.args[0] for call in inspect.call_args_list], [helpers[1]])
+
     @unittest.skipUnless(sys.platform == 'win32', 'Windows last-error semantics')
     def test_helper_snapshot_failure_and_unreadable_exit_are_incomplete(self):
         monitor = native.HelperLifecycle(lambda *_args, **_kw: None)

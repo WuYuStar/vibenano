@@ -218,8 +218,14 @@ def connect(app, controller):
         except Exception as exc:
             print(repr(exc), file=sys.stderr)
             app.exit(2)
-    for stage, delay in enumerate((50, 600, 850, 1400)):
-        QTimer.singleShot(delay, lambda stage=stage: check(stage))
+            return
+        if stage < 3:
+            # Schedule from the completed operation, not from before QML
+            # construction. Slow first-time loading can otherwise make all
+            # absolute timers overdue before the restore poll runs once.
+            delay = (400, 250, 400)[stage]
+            QTimer.singleShot(delay, lambda: check(stage + 1))
+    QTimer.singleShot(50, lambda: check(0))
     QTimer.singleShot(5000, lambda: app.exit(3))
 m._connect_application_exit = connect
 result = m.run_settings_window(start_hidden=True)

@@ -35,6 +35,10 @@ DEFAULT_PROVIDER_HOTKEYS = {
     # Read the user's actual shortcut; no machine-specific default.
     voice_program_manager.VOICE_PROGRAM_CHATTERFLY: "",
     voice_program_manager.VOICE_PROGRAM_CUSTOM: "ralt",
+    voice_program_manager.VOICE_PROGRAM_FASTER_WHISPER: "",
+    voice_program_manager.VOICE_PROGRAM_PARAFORMER: "",
+    voice_program_manager.VOICE_PROGRAM_FUN_ASR_NANO: "",
+    voice_program_manager.VOICE_PROGRAM_QWEN3_ASR: "",
 }
 
 _SOGOU_CONFIG_RELATIVE_PATH = Path("sogou_voice_assistant_pc") / "config.json"
@@ -267,6 +271,21 @@ def validate_provider_hotkey(
     """Validate one shortcut against the selected program's input rules."""
 
     provider = str(provider_id).strip().lower()
+    if provider in voice_program_manager.LOCAL_VOICE_PROVIDERS:
+        if str(shortcut).strip():
+            return VoiceHotkeySyncResult(
+                provider,
+                False,
+                "no_hotkey",
+                message="本地语音识别不使用语音快捷键，请勿录入按键。",
+            )
+        return VoiceHotkeySyncResult(
+            provider,
+            True,
+            "no_hotkey",
+            "",
+            "本地语音识别不需要语音快捷键。",
+        )
     spec, parsed = _parsed_hotkey(provider, shortcut)
     if spec is None:
         return parsed
@@ -388,6 +407,14 @@ def read_provider_hotkey(
 ) -> VoiceHotkeySyncResult:
     provider = str(provider_id).strip().lower()
     current_platform = platform or sys.platform
+    if provider in voice_program_manager.LOCAL_VOICE_PROVIDERS:
+        return VoiceHotkeySyncResult(
+            provider,
+            True,
+            "no_hotkey",
+            "",
+            "本地语音识别在无线麦内直接识别，不需要语音快捷键。",
+        )
     if provider in {
         voice_program_manager.VOICE_PROGRAM_NONE,
         voice_program_manager.VOICE_PROGRAM_CUSTOM,
@@ -438,6 +465,15 @@ def sync_provider_hotkey(
     if not validation.ok:
         return validation
     normalized = validation.hotkey
+
+    if provider in voice_program_manager.LOCAL_VOICE_PROVIDERS:
+        return VoiceHotkeySyncResult(
+            provider,
+            True,
+            "no_hotkey",
+            "",
+            "本地语音识别不需要同步语音快捷键。",
+        )
 
     current_platform = platform or sys.platform
     if provider in {

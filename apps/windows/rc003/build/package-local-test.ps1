@@ -9,8 +9,8 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$RC003Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$RepoRoot = (Resolve-Path (Join-Path $RC003Root "..\..\..")).Path
+$RC003Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).ProviderPath
+$RepoRoot = (Resolve-Path (Join-Path $RC003Root "..\..\..")).ProviderPath
 if ([string]::IsNullOrWhiteSpace($BuildRoot)) {
     $BuildRoot = Join-Path $RC003Root "dist\RemoteMicRC003"
 } else {

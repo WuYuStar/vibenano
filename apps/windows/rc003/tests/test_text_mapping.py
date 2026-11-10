@@ -82,6 +82,72 @@ class PasteBoundaryTests(unittest.TestCase):
         self.writer.assert_called_once_with(TEXT)
         self.assertEqual(self.sender.call_args.args[0], [(0x11, False), (0x56, False), (0x56, True), (0x11, True)])
 
+    def test_capture_text_target_uses_live_guards_and_returns_tuple(self):
+        with mock.patch.object(win32_input, "_require_live_input_allowed") as live_guard, \
+             mock.patch.object(win32_input, "_require_windows") as windows_guard, \
+             mock.patch.object(win32_input, "_foreground_text_target", return_value=(10, 20)) as query:
+            target = win32_input.capture_text_target()
+        self.assertEqual(target, (10, 20))
+        self.assertIsInstance(target, tuple)
+        live_guard.assert_called_once_with()
+        windows_guard.assert_called_once_with()
+        query.assert_called_once_with()
+
+    def test_expected_target_mismatch_precedes_clipboard_write(self):
+        target_query = mock.Mock(return_value=(9, 9))
+        with self.assertRaises(win32_input.TextTargetChangedError) as caught:
+            win32_input.paste_text(
+                TEXT, expected_target=(1, 2),
+                **{**self.kwargs, "_target_query": target_query},
+            )
+        self.assertEqual(str(caught.exception), "text paste target changed")
+        target_query.assert_called_once_with()
+        self.writer.assert_not_called()
+        self.sender.assert_not_called()
+
+    def test_expected_target_mismatch_between_checks_does_not_paste(self):
+        target_query = mock.Mock(side_effect=[(1, 2), (1, 3)])
+        sequence_query = mock.Mock(return_value=42)
+        with self.assertRaises(win32_input.TextTargetChangedError) as caught:
+            win32_input.paste_text(
+                TEXT, expected_target=(1, 2),
+                **{**self.kwargs, "_target_query": target_query,
+                   "_sequence_query": sequence_query},
+            )
+        self.assertEqual(str(caught.exception), "text paste target changed")
+        self.assertEqual(target_query.call_count, 2)
+        self.writer.assert_called_once_with(TEXT)
+        sequence_query.assert_called_once_with()
+        self.sender.assert_not_called()
+
+    def test_stable_expected_target_pastes_once(self):
+        target_query = mock.Mock(return_value=(1, 2))
+        sequence_query = mock.Mock(return_value=42)
+        key_query = mock.Mock(return_value=False)
+        win32_input.paste_text(
+            TEXT, expected_target=(1, 2),
+            **{**self.kwargs, "_target_query": target_query,
+               "_sequence_query": sequence_query, "_key_down_query": key_query},
+        )
+        self.assertEqual(target_query.call_count, 2)
+        self.writer.assert_called_once_with(TEXT)
+        sequence_query.assert_called_once_with()
+        self.sender.assert_called_once()
+        self.assertEqual(self.sender.call_args.args[0], [
+            (0x11, False), (0x56, False), (0x56, True), (0x11, True),
+        ])
+
+    def test_legacy_target_mismatch_keeps_existing_error(self):
+        target_query = mock.Mock(side_effect=[(1, 2), (1, 3)])
+        with self.assertRaises(OSError) as caught:
+            win32_input.paste_text(
+                TEXT, **{**self.kwargs, "_target_query": target_query},
+            )
+        self.assertNotIsInstance(caught.exception, win32_input.TextTargetChangedError)
+        self.assertEqual(str(caught.exception), "text paste target changed before submission")
+        self.writer.assert_called_once_with(TEXT)
+        self.sender.assert_not_called()
+
     def test_busy_or_changed_clipboard_and_changed_focus_do_not_paste(self):
         self.writer.side_effect = OSError("clipboard is busy")
         with self.assertRaises(OSError):
@@ -199,7 +265,7 @@ class TextActionWiringTests(test_app_wiring._AppWiringTestCase):
         self.app._bindings["bindings"]["ok"] = action.to_dict()
         with mock.patch.object(win32_input, "paste_text") as paste:
             self.app._on_button_trigger("ok", km.ButtonTrigger.SINGLE_CLICK)
-            paste.assert_called_once_with(TEXT)
+            paste.assert_called_once_with(TEXT, expected_target=None)
         self.assertFalse(self.app._is_button_repeatable("ok"))
         with mock.patch.object(win32_input, "paste_text", side_effect=win32_input.InputCleanupIncompleteError("test")):
             self.app._apply_button_action(action)

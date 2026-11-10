@@ -250,6 +250,36 @@ class WinRTDependencyClosureContractTests(unittest.TestCase):
         )
 
 
+class NanoBuildContractTests(unittest.TestCase):
+    def setUp(self):
+        self.spec = _SPEC_PATH.read_text(encoding="utf-8")
+        self.tree = ast.parse(self.spec)
+        self.requirements = _REQUIREMENTS_PATH.read_text(encoding="utf-8")
+
+    def test_retired_python_asr_stacks_are_not_declared_or_collected(self):
+        for package in ("torch", "transformers", "funasr", "faster-whisper", "ctranslate2", "onnxruntime"):
+            self.assertNotIn(package + "==", self.requirements)
+        self.assertNotIn("SPEECH_PACKAGES =", self.spec)
+        self.assertIn("RETIRED_ASR_PACKAGES", self.spec)
+        self.assertIn("excludes=[*RETIRED_ASR_PACKAGES", self.spec)
+        self.assertIn("requests==2.34.2", self.requirements)
+        self.assertIn("filelock==4.2.9", self.requirements)
+
+    def test_native_nano_worker_is_required_as_data_and_models_are_not_bundled(self):
+        self.assertIn('nano_runtime.is_file()', self.spec)
+        self.assertIn('datas.append((str(nano_runtime), "fun_asr_nano"))', self.spec)
+        self.assertNotIn('snapshot_download(', self.spec)
+        self.assertNotIn('hf_hub_download(', self.spec)
+        self.assertNotIn('WhisperModel(', self.spec)
+
+    def test_hid_helper_keeps_all_speech_code_out(self):
+        excluded = next(ast.literal_eval(n.value) for n in self.tree.body
+            if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "HELPER_EXCLUDES" for t in n.targets))
+        self.assertIn("ovb_rc003.local_speech_provider", excluded)
+        self.assertIn("ovb_rc003.local_speech_core", excluded)
+        self.assertIn("ovb_rc003.model_downloads", excluded)
+
+
 class PyInstallerSpecTests(unittest.TestCase):
     def test_spec_is_valid_python(self):
         text = _SPEC_PATH.read_text(encoding="utf-8")
@@ -1582,11 +1612,16 @@ class WindowsCiWorkflowTests(unittest.TestCase):
                 f'{trigger_line!r} must appear once under push.paths and once under pull_request.paths',
             )
 
-    def test_pip_cache_uses_the_exact_requirements_dev_path(self):
-        self.assertIn(
-            "cache-dependency-path: apps/windows/rc003/requirements-dev.txt",
-            self.text,
-        )
+    def test_pip_cache_invalidates_for_dev_and_direct_runtime_pins(self):
+        self.assertIn("cache-dependency-path: |", self.text)
+        cache_block = self.text.split("cache-dependency-path: |", 1)[1].split(
+            "\n\n", 1
+        )[0]
+        for requirement_path in (
+            "apps/windows/rc003/requirements-dev.txt",
+            "apps/windows/rc003/requirements.txt",
+        ):
+            self.assertIn(f"            {requirement_path}", cache_block)
 
     def test_supports_manual_and_release_tag_builds_without_auto_publishing(self):
         self.assertIn("workflow_dispatch:", self.text)

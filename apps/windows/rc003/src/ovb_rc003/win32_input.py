@@ -294,6 +294,10 @@ class PhysicalKeyInUseError(OSError):
     """Raised before injection when a real keyboard key already owns a VK."""
 
 
+class TextTargetChangedError(OSError):
+    """Raised when a delayed text paste no longer has its captured target."""
+
+
 def _require_windows() -> None:
     if sys.platform != "win32":
         raise Win32InputUnavailableError(
@@ -1439,6 +1443,14 @@ def _foreground_text_target() -> tuple[int, int]:
     return int(window), int(info.hwndFocus)
 
 
+def capture_text_target() -> tuple[int, int]:
+    """Capture an immutable foreground/focus identity for a later text paste."""
+
+    _require_live_input_allowed()
+    _require_windows()
+    return _foreground_text_target()
+
+
 def _clipboard_sequence() -> int:
     user = ctypes.WinDLL("user32", use_last_error=True)
     user.GetClipboardSequenceNumber.restype = wintypes.DWORD
@@ -1523,14 +1535,15 @@ def _write_clipboard_text(text: str) -> int:
 
 
 def paste_text(
-    text: str, *, _writer=None, _target_query=None, _sequence_query=None,
-    _key_down_query=None, _sender=None,
+    text: str, expected_target=None, *, _writer=None, _target_query=None,
+    _sequence_query=None, _key_down_query=None, _sender=None,
 ) -> None:
     """Write literal text then submit one Ctrl+V, without Enter or retries.
 
     Serialization covers clipboard write and shortcut submission. SendInput
     confirms submission, not consumption by an arbitrary target application.
     After a successful write, the preset remains available for manual paste.
+    A delayed caller can bind the paste to a target from capture_text_target().
     """
     from .key_mapping import validate_preset_text
     validate_preset_text(text)
@@ -1542,14 +1555,18 @@ def paste_text(
     key_query = _key_down_query or _physical_key_is_down_before_injection
     with _text_paste_lock:
         target = target_query()
+        if expected_target is not None and target != expected_target:
+            raise TextTargetChangedError("text paste target changed")
         # A held Shift/Alt/Win would change Ctrl+V into a different command.
         _ensure_keys_not_physically_down((0x10, 0x11, 0x12, 0x5B, 0x5C, 0x56), key_query)
         sequence = (_writer or _write_clipboard_text)(text)
-        if target_query() != target:
+        if expected_target is None and target_query() != target:
             raise OSError("text paste target changed before submission")
         if sequence_query() != sequence:
             raise OSError("clipboard changed before text paste submission")
         _ensure_keys_not_physically_down((0x10, 0x11, 0x12, 0x5B, 0x5C, 0x56), key_query)
+        if expected_target is not None and target_query() != expected_target:
+            raise TextTargetChangedError("text paste target changed")
         send_key_combo_tap(("ctrl", "v"), _sender=_sender, _key_down_query=key_query)
 
 

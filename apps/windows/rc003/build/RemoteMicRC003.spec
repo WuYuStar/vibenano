@@ -22,6 +22,7 @@ import importlib.machinery
 from pathlib import Path
 
 from PyInstaller.utils.win32 import versioninfo
+from PyInstaller.utils.hooks import collect_all, collect_delvewheel_libs_directory, copy_metadata
 from PyInstaller.config import CONF
 
 block_cipher = None
@@ -170,6 +171,10 @@ if not REMOTE_PHOTO.is_file():
 
 datas = []
 datas.append((str(VERSION_FILE), "ovb_rc003"))
+nano_runtime = RC003_ROOT / ".build" / "nano-runtime" / "rc003-nano.exe"
+if not nano_runtime.is_file():
+    raise SystemExit("required Fun-ASR-Nano runtime is missing; see build/nano/README.md")
+datas.append((str(nano_runtime), "fun_asr_nano"))
 # This places the photo under Resources/ inside the one-dir COLLECT output,
 # which PyInstaller exposes at runtime as sys._MEIPASS/Resources/. A source
 # checkout may still degrade if a user deletes the file after startup, but a
@@ -213,7 +218,7 @@ if DEVICE_PROFILES_DIR.is_dir():
     # sys._MEIPASS/device-profiles and fails closed if they are absent or
     # invalid; no generated/hard-coded duplicate is bundled.
     datas.append((str(DEVICE_PROFILES_DIR), "device-profiles"))
-if VB_CABLE_BUNDLE_ZIP.is_file():
+if VB_CABLE_BUNDLE_ZIP.is_file() and os.environ.get("RC003_PUBLIC_DISTRIBUTION") != "1":
     # Collected under "vb_cable_bundle" inside the COLLECT output, matching
     # vb_cable_bundle.py's _candidate_bundle_paths(), which looks under
     # sys._MEIPASS / "vb_cable_bundle" in a frozen build - same
@@ -298,6 +303,10 @@ hiddenimports = [
     "ovb_rc003.chromecast_voice_host",
     "ovb_rc003.voice_audio_session",
     "ovb_rc003.voice_shortcut_session",
+    "ovb_rc003.local_speech_core",
+    "ovb_rc003.local_speech_provider",
+    "ovb_rc003.model_downloads",
+    "ovb_rc003.package_smoke",
     "ovb_rc003.chatterfly_control_windows",
     "ovb_rc003.chromecast_voice_receiver",
     "ovb_rc003.chromecast_wetype_finish",
@@ -351,6 +360,14 @@ if NATIVE_STAGE:
     hiddenimports = sorted(set(hiddenimports) | (set(import_closure(RC003_ROOT))
                                                 - set(NAVIGATION_MODULES)))
 
+# The only local model is the separately bundled Nano native CPU worker.
+# Python ML stacks are deliberately excluded, even in a developer environment
+# that still has old comparison dependencies installed.
+speech_datas, speech_binaries, speech_hiddenimports = [], [], []
+RETIRED_ASR_PACKAGES = ("faster_whisper", "ctranslate2", "tokenizers", "onnxruntime",
+    "av", "huggingface_hub", "funasr", "torch", "torchaudio", "modelscope",
+    "modelscope_hub", "librosa", "kaldiio", "transformers", "qwen_asr")
+
 a = Analysis(
     # XRBM-021: analyze the standalone src/launcher.py, NOT the package's
     # own src/ovb_rc003/__main__.py. PyInstaller treats its entry script as
@@ -364,13 +381,13 @@ a = Analysis(
     # main`), which needs no parent package.
     [str(SRC_ROOT / "launcher.py")],
     pathex=[str(SRC_ROOT)],
-    binaries=navigation_binaries,
-    datas=datas,
-    hiddenimports=hiddenimports,
+    binaries=navigation_binaries + speech_binaries,
+    datas=datas + speech_datas,
+    hiddenimports=hiddenimports + speech_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[str(SRC_ROOT / "remote_scan_runtime_hook.py")],
-    excludes=[
+    excludes=[*RETIRED_ASR_PACKAGES,
         # Defensive: this tree never contains these, but excluding them keeps
         # the boundary explicit if the spec is ever copy-pasted elsewhere.
         "bridges.t1",
@@ -435,6 +452,27 @@ a.binaries = [
     and not _is_unneeded_sounddevice_asio(binary_entry)
 ]
 
+# CPython's _ssl/_hashlib must use the exact OpenSSL pair from its DLLs
+# directory. PATH may contain MySQL/Git DLLs with identical filenames but an
+# incompatible ABI; accepting those silently breaks all packaged HTTPS.
+python_tls_directory = Path(sys.base_prefix) / "DLLs"
+python_tls_names = {"libssl-3-x64.dll", "libcrypto-3-x64.dll"}
+for filename in python_tls_names:
+    if not (python_tls_directory / filename).is_file():
+        raise SystemExit(f"required CPython TLS library missing: {filename}")
+a.binaries = [entry for entry in a.binaries
+    if Path(entry[0]).name.casefold() not in python_tls_names]
+a.binaries.extend((filename, str(python_tls_directory / filename), "BINARY")
+                  for filename in sorted(python_tls_names))
+
+
+# Some supplied CPython runtimes have an SSLContext policy PEM referenced
+# relative to ssl.__file__. Preserve that runtime policy in the bundle.
+python_ssl_policy = Path(sys.base_prefix) / "Lib" / "codex-rejected-cas.pem"
+if python_ssl_policy.is_file():
+    a.datas.append((python_ssl_policy.name, str(python_ssl_policy), "DATA"))
+
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
@@ -461,6 +499,10 @@ exe = EXE(
 # UI, BLE scans, audio and configuration normalization dependencies are excluded.
 HELPER_EXCLUDES = (
     "PySide6", "numpy", "sounddevice", "winrt", "uiautomation",
+    "faster_whisper", "ctranslate2", "tokenizers", "onnxruntime", "av",
+    "huggingface_hub", "ovb_rc003.local_speech_core",
+    "funasr", "torch", "torchaudio", "modelscope", "modelscope_hub", "librosa", "kaldiio",
+    "ovb_rc003.local_speech_provider", "ovb_rc003.model_downloads", "ovb_rc003.package_smoke",
     "ovb_rc003.app", "ovb_rc003.qt_settings_app", "ovb_rc003.ble_transport_winrt",
     "ovb_rc003.audio_playback", "ovb_rc003.windows_diagnostics",
     "ovb_rc003.settings_ui", "ovb_rc003.key_mapping",

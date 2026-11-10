@@ -15,7 +15,7 @@ corresponding source available from a location controlled by this project.
 - Official source: <https://download.qt.io/official_releases/qt/6.11/6.11.1/single/qt-everywhere-src-6.11.1.tar.xz>
 - Size: 1,017,723,080 bytes
 - SHA-256: `252acef8c5ae68074d91cadba2ee4a83465051bbb970dd26e8f0daa0f3904e03`
-- Project-controlled release URL: <https://github.com/ZSTDJan/windows-remote-mic-app/releases/download/third-party-source-qt-6.11.1/qt-everywhere-src-6.11.1.tar.xz>
+- Project-controlled release URL: <https://github.com/WuYuStar/vibenano/releases/download/third-party-source-qt-6.11.1/qt-everywhere-src-6.11.1.tar.xz>
 
 ### Qt for Python / PySide6 6.11.1
 
@@ -23,7 +23,7 @@ corresponding source available from a location controlled by this project.
 - Official source: <https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.11.1-src/pyside-setup-everywhere-src-6.11.1.tar.xz>
 - Size: 17,963,432 bytes
 - SHA-256: `6ffd9835bb0dd2c56f061d62f1616bb1707cfc0202b80e3165d6be087f3965e2`
-- Project-controlled release URL: <https://github.com/ZSTDJan/windows-remote-mic-app/releases/download/third-party-source-qt-6.11.1/pyside-setup-everywhere-src-6.11.1.tar.xz>
+- Project-controlled release URL: <https://github.com/WuYuStar/vibenano/releases/download/third-party-source-qt-6.11.1/pyside-setup-everywhere-src-6.11.1.tar.xz>
 
 ## Distribution statement
 
@@ -33,12 +33,19 @@ keeps Qt as replaceable DLLs and QML/plugin files under the application's
 `程序文件/PySide6` directory rather than statically linking them into the main
 executable.
 
-The corresponding-source delivery was verified on 2026-09-01:
+The upstream project originally recorded its source delivery on 2026-09-01.
+VibeNano mirrors these exact, unmodified source archives under its own
+`third-party-source-qt-6.11.1` release. SHA-256 is checked before upload.
+Official Qt URLs remain recorded as provenance. The VibeNano binary release
+is published only after both mirror assets have been uploaded successfully.
 
-1. both archives were uploaded to the project-controlled GitHub prerelease;
-2. both public URLs were downloaded once after publication;
-3. the downloaded sizes and SHA-256 values matched the records above.
+## 1.0.107 Nano corresponding source
 
-Official Qt download links remain recorded as provenance. The project-controlled
-release URLs above are the corresponding-source delivery used by the Windows
-binary release gate.
+The `RemoteMicRC003-1.0.107-source.zip` release attachment includes the current
+application source, `build/nano/` recipe, modified worker and license records,
+plus `third-party-source/nano/fun-asr-source.tar.gz` and `llama-source.tar.gz`.
+Exact archive SHA-256 values and revisions are in
+`apps/windows/rc003/build/nano/native-build.json`. They must accompany the
+portable binary release. Model weights remain separately downloaded and are
+not substituted for implementation source. The existing Qt/PySide source
+archives above remain required and must remain publicly downloadable.

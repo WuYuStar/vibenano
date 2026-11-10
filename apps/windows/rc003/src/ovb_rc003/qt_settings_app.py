@@ -140,6 +140,7 @@ from . import (
     vb_cable_bundle,
     voice_hotkey_sync_windows,
     voice_program_manager,
+    model_downloads,
     wetype_control_windows,
     win32_keys,
     window_chrome_windows,
@@ -147,6 +148,29 @@ from . import (
 )
 
 _VOICE_HOTKEY_TASK_TIMEOUT_MS = 2500
+
+_FASTER_WHISPER_RUNTIME_TEXT = {
+    "not_tested": "待识别",
+    "model_loading": "正在加载/下载模型",
+    "active": "录音中",
+    "mic_confirmed": "录音中",
+    "receiving_audio": "录音中",
+    "transcribing": "正在识别",
+    "finishing": "正在识别",
+    "success": "识别完成（文字粘贴已提交）",
+    "audio_empty": "未识别到文字/未收到声音",
+    "unavailable": "识别组件或模型不可用",
+    "failed": "识别失败",
+    "busy": "上一段仍在识别，请稍后",
+    "text_submit_failed": "文字输入失败（焦点变化或目标不可用）",
+    "host_start_failed": "无法开始本地录音",
+}
+
+
+def _faster_whisper_runtime_status_text(state: object) -> str:
+    """Return privacy-safe local runtime text; never include a transcript."""
+
+    return _FASTER_WHISPER_RUNTIME_TEXT.get(str(state), "待识别")
 
 
 @dataclass
@@ -1185,6 +1209,7 @@ def _load_qt_classes() -> dict:
         bridgeInputStateChanged = Signal()
         remoteBatteryChanged = Signal()
         voiceRuntimeStatusChanged = Signal()
+        voiceActivityChanged = Signal()
         bridgeLaunchPhaseChanged = Signal()
         bridgeLaunchElapsedSecondsChanged = Signal()
         bridgeRestartRecommendedChanged = Signal()
@@ -1215,6 +1240,10 @@ def _load_qt_classes() -> dict:
         _remoteSwitchReady = Signal(object)
         _chromecastSetupReady = Signal(object)
         selectedVoiceProgramIndexChanged = Signal()
+        fasterWhisperSettingsChanged = Signal()
+        modelDownloadsChanged = Signal()
+        storeAppsChanged = Signal()
+        _storeAppsReady = Signal(object)
         voiceProgramOptionsChanged = Signal()
         voiceProgramCustomPathChanged = Signal()
         voiceProgramLaunchOnBridgeStartChanged = Signal()
@@ -1264,6 +1293,11 @@ def _load_qt_classes() -> dict:
         _applicationUpdateProgressReady = Signal(object)
 
         _TRIGGER_MODE_ORDER = (key_mapping.VoiceTriggerMode.HOLD,)
+        _FASTER_WHISPER_SETTING_CHOICES = {
+            "faster_whisper_model": ("tiny", "base", "small"),
+            "faster_whisper_threads": (1, 2, 4, 8),
+            "faster_whisper_beam_size": (1, 2, 5),
+        }
         _DEVICE_ORDER = (device_catalog.RC003_ID, device_catalog.CHROMECAST_ID)
         _DEVICE_PAGE_INDEX = 0
         _BUTTONS_PAGE_INDEX = 1
@@ -1391,6 +1425,10 @@ def _load_qt_classes() -> dict:
             self._chromecast_setup_client = None
             self._chromecast_setup_error = ""
             self._remoteDevicesReady.connect(self._on_remote_devices_ready)
+            self._storeAppsReady.connect(self._on_store_apps_ready)
+            self._store_apps = []
+            self._store_apps_busy = False
+            self._store_apps_error = ""
             self._remoteSwitchReady.connect(self._on_remote_switch_ready)
             self._chromecastSetupReady.connect(self._on_chromecast_setup_ready)
             self.remoteSelectionChanged.connect(self.trayStateChanged.emit)
@@ -1460,6 +1498,9 @@ def _load_qt_classes() -> dict:
                     self._config.get("voice_program")
                 )
             )
+            self._model_download_manager = model_downloads.ModelDownloadManager(self._config_root / "models")
+            self._model_download_items = []
+            self.refreshModelDownloads()
             self._voice_program_settings_dirty = False
             self._voice_program_status_text = ""
             self._voice_program_status_code = "unknown"
@@ -1560,6 +1601,7 @@ def _load_qt_classes() -> dict:
                 if runtime_status is not None
                 else None
             )
+            self._voice_activity_state = ""
             self._voice_runtime_state = (
                 runtime_status.voice_runtime_state
                 if runtime_status is not None
@@ -1853,6 +1895,7 @@ def _load_qt_classes() -> dict:
             """Synchronously release input hooks before Qt objects disappear."""
 
             self._application_exit_intent.set()
+            self._model_download_manager.close()
             _driver_action_active_event.clear()
             cancel_event = self._input_operation_cancel_event
             if cancel_event is not None:
@@ -2541,6 +2584,8 @@ def _load_qt_classes() -> dict:
             if value == self._bridge_running:
                 return
             self._bridge_running = value
+            if not value:
+                self._set_voice_activity_status(None)
             self.bridgeRunningChanged.emit()
             self.trayStateChanged.emit()
 
@@ -2559,10 +2604,47 @@ def _load_qt_classes() -> dict:
             self._bridge_connection_state = value
             self.bridgeConnectionStateChanged.emit()
 
+        def _set_voice_activity_status(self, status) -> None:
+            # This indicator consumes only runtime metadata, never microphone
+            # samples or editor text. Stale/foreign/disconnected sessions hide it.
+            activity = ""
+            if (
+                self._bridge_running
+                and status is not None
+                and getattr(status, "state", None) is bridge_runtime_status.BridgeConnectionState.CONNECTED
+                and status.voice_runtime_provider == self._voice_program_settings.get("provider")
+                and time.time() - status.updated_at <= _BRIDGE_STATUS_STALE_AFTER_SECONDS
+                and bridge_runtime_status.runtime_identity_matches(
+                    status, self._current_runtime_identity
+                ) is True
+            ):
+                if status.voice_active:
+                    activity = "listening"
+                elif status.voice_runtime_state == "model_loading":
+                    activity = "loading"
+                elif status.voice_runtime_state in {"transcribing", "finishing"}:
+                    activity = "processing"
+            if activity != self._voice_activity_state:
+                self._voice_activity_state = activity
+                self.voiceActivityChanged.emit()
+
+        @Slot()
+        def refreshVoiceActivity(self) -> None:
+            # The normal service refresh does process/configuration work every
+            # two seconds. Poll just the bounded status file for responsive
+            # feedback, without scanning devices or reloading configuration.
+            status = (
+                bridge_runtime_status.read_status(self._config_root)
+                if self._bridge_running and not self._application_exit_intent.is_set()
+                else None
+            )
+            self._set_voice_activity_status(status)
+
         def _set_bridge_input_states(
             self,
             status: Optional[bridge_runtime_status.BridgeRuntimeStatus],
         ) -> None:
+            self._set_voice_activity_status(status)
             raw_input_state = status.raw_input_state if status is not None else "unknown"
             if raw_input_state == "chromecast_ready" and self._chromecast_setup_error:
                 self._chromecast_setup_error = ""
@@ -2709,12 +2791,20 @@ def _load_qt_classes() -> dict:
                 state = ("普通按键接收正常" if status.raw_input_state == "chromecast_ready"
                          else "正在核实按键来源" if status.raw_input_state == "starting"
                          else message(status.raw_input_state.removeprefix("chromecast_")))
-                voice_state = {
-                    bridge_runtime_status.VOICE_RUNTIME_HOST_START_FAILED: "语音启动失败，请查看运行日志",
-                    bridge_runtime_status.VOICE_RUNTIME_HOST_UNCONFIRMED: unconfirmed_text,
-                    bridge_runtime_status.VOICE_RUNTIME_HOST_STOP_FAILED: "语音尚未正常结束，请先停止服务",
-                    bridge_runtime_status.VOICE_RUNTIME_OUTPUT_OPEN_FAILED: "语音输出未打开，请检查声音通道",
-                }.get(status.voice_runtime_state, "语音请先用微信输入法验证")
+                if (
+                    status.voice_runtime_provider
+                    in voice_program_manager.LOCAL_VOICE_PROVIDERS
+                ):
+                    voice_state = _faster_whisper_runtime_status_text(
+                        status.voice_runtime_state
+                    )
+                else:
+                    voice_state = {
+                        bridge_runtime_status.VOICE_RUNTIME_HOST_START_FAILED: "语音启动失败，请查看运行日志",
+                        bridge_runtime_status.VOICE_RUNTIME_HOST_UNCONFIRMED: unconfirmed_text,
+                        bridge_runtime_status.VOICE_RUNTIME_HOST_STOP_FAILED: "语音尚未正常结束，请先停止服务",
+                        bridge_runtime_status.VOICE_RUNTIME_OUTPUT_OPEN_FAILED: "语音输出未打开，请检查声音通道",
+                    }.get(status.voice_runtime_state, "语音请先用微信输入法验证")
                 return f"服务运行中；{self.currentRemoteModelName}；{state}；{voice_state}"
             connected = (
                 status.state
@@ -2799,9 +2889,17 @@ def _load_qt_classes() -> dict:
                 age = max(0.0, time.time() - status.last_button_at)
                 if age <= 10.0:
                     input_text += f"，刚收到按键（{status.last_button_source or '来源未知'}）"
-            voice_text = "语音进行中" if status.voice_active else "语音空闲"
-            if status.voice_runtime_state == bridge_runtime_status.VOICE_RUNTIME_HOST_UNCONFIRMED:
-                voice_text = unconfirmed_text
+            if (
+                status.voice_runtime_provider
+                in voice_program_manager.LOCAL_VOICE_PROVIDERS
+            ):
+                voice_text = _faster_whisper_runtime_status_text(
+                    status.voice_runtime_state
+                )
+            else:
+                voice_text = "语音进行中" if status.voice_active else "语音空闲"
+                if status.voice_runtime_state == bridge_runtime_status.VOICE_RUNTIME_HOST_UNCONFIRMED:
+                    voice_text = unconfirmed_text
             stale_text = (
                 "；状态更新滞后"
                 if time.time() - status.updated_at
@@ -4347,6 +4445,15 @@ def _load_qt_classes() -> dict:
                 self.voiceProgramLaunchOnBridgeStartChanged.emit()
             if current["launch_elevated"] != previous.get("launch_elevated"):
                 self.voiceProgramLaunchElevatedChanged.emit()
+            if any(
+                current[key] != previous.get(key)
+                for key in (
+                    "faster_whisper_model",
+                    "faster_whisper_threads",
+                    "faster_whisper_beam_size",
+                )
+            ):
+                self.fasterWhisperSettingsChanged.emit()
             self._request_voice_program_status_refresh()
 
         def _voice_settings_write_block_reason(self) -> str:
@@ -5089,6 +5196,10 @@ def _load_qt_classes() -> dict:
                 return finish(False)
 
             trigger_mode = key_mapping.VoiceTriggerMode.HOLD
+            local_voice_provider = (
+                self._voice_program_settings.get("provider")
+                in voice_program_manager.LOCAL_VOICE_PROVIDERS
+            )
             endpoint_display = (
                 self._endpoint_options[self._selected_endpoint_index]
                 if 0 <= self._selected_endpoint_index < len(self._endpoint_options)
@@ -5113,6 +5224,8 @@ def _load_qt_classes() -> dict:
                                      if self._voice_hotkey_trigger() == "toggle" else self._voice_hotkeys[mode])
                         for mode in self._TRIGGER_MODE_ORDER
                     },
+                    # Only the built-in local provider intentionally has no hotkey.
+                    validate_voice_hotkeys=not local_voice_provider,
                 )
             except settings_ui.SettingsValidationError as exc:
                 button_name = (
@@ -5169,6 +5282,7 @@ def _load_qt_classes() -> dict:
             requires_preflight = bool(
                 endpoint_name
                 and voice_mapping_enabled
+                and not local_voice_provider
                 and (endpoint_changed or not previous_voice_mapping_enabled)
             )
 
@@ -5307,6 +5421,8 @@ def _load_qt_classes() -> dict:
             return self._voice_hotkeys[key_mapping.VoiceTriggerMode.HOLD]
 
         def _set_hold_voice_hotkey_text(self, value: str) -> None:
+            if self._voice_program_settings.get("provider") in voice_program_manager.LOCAL_VOICE_PROVIDERS:
+                return
             logging_setup.get_logger(self._config_root).info(
                 "settings hotkey capture: QML submitted provider=%s chord=%s",
                 self._voice_program_settings.get("provider", ""),
@@ -5330,6 +5446,55 @@ def _load_qt_classes() -> dict:
             ),
             notify=voiceHotkeySourceChanged,
         )
+
+        @Slot()
+        def refreshModelDownloads(self) -> None:
+            manager = self._model_download_manager
+            manager.reap()
+            name = "nano"
+            rows = []
+            for engine, model_name, title, size in (
+                (model_downloads.NANO, "nano", "Fun-ASR-Nano · CPU 量化", "约 1.28 GB"),
+            ):
+                root = model_downloads.cache_root(manager.models_root, engine)
+                status = model_downloads.model_status(root, engine, model_name)
+                owned = manager.selection == (engine, model_name)
+                busy = owned or status["state"] in ("connecting", "downloading")
+                message = status["message"]
+                if owned and status["state"] in ("missing", "paused"):
+                    message = "正在准备下载"
+                if status.get("total", 0) > 0 and status["state"] == "downloading":
+                    message = (str(status.get("file", "")) + " · "
+                        + f'{status.get("done", 0) / 1048576:.1f} / {status["total"] / 1048576:.1f} MB')
+                rows.append({"engine": engine, "title": title, "size": size,
+                    "message": message, "percent": float(status.get("percent", 0)),
+                    "state": status["state"], "busy": busy, "determinate": status.get("total", 0) > 0,
+                    "canCancel": owned, "canDownload": not busy and status["state"] != "ready"
+                        and manager.process is None})
+            if rows != self._model_download_items:
+                self._model_download_items = rows
+                self.modelDownloadsChanged.emit()
+
+        modelDownloadItems = Property("QVariantList", lambda self: self._model_download_items,
+                                      notify=modelDownloadsChanged)
+
+        modelDownloadBusy = Property(bool, lambda self: self._model_download_manager.process is not None,
+                                     notify=modelDownloadsChanged)
+
+        @Slot(str)
+        def downloadLocalModel(self, engine: str) -> None:
+            if engine != model_downloads.NANO:
+                return
+            if self.configurationReadOnly or self._application_exit_intent.is_set():
+                return
+            name = "nano"
+            self._model_download_manager.start(engine, name)
+            self.refreshModelDownloads()
+
+        @Slot()
+        def cancelModelDownload(self) -> None:
+            self._model_download_manager.cancel()
+            self.refreshModelDownloads()
 
         def _get_voice_program_options(self) -> List[str]:
             return list(self._voice_program_options)
@@ -5357,6 +5522,24 @@ def _load_qt_classes() -> dict:
                 return
             if provider_id == self._voice_program_settings.get("provider"):
                 self.loadVoiceHotkeyFromProvider()
+                return
+            if provider_id in voice_program_manager.LOCAL_VOICE_PROVIDERS:
+                previous_hotkey = self._get_hold_voice_hotkey_text()
+                self._set_voice_hotkey_busy(True)
+                # Local recognition has no provider shortcut to read or sync.
+                self._on_selected_voice_program_hotkey_ready(
+                    provider_id,
+                    "",
+                    previous_hotkey,
+                    True,
+                    voice_hotkey_sync_windows.VoiceHotkeySyncResult(
+                        provider_id,
+                        True,
+                        "no_hotkey",
+                        "",
+                        "本地语音识别不需要语音快捷键。",
+                    ),
+                )
                 return
             remembered_hotkey = self._display_voice_hotkey(provider_id)
             previous_hotkey = self._get_hold_voice_hotkey_text()
@@ -5428,11 +5611,16 @@ def _load_qt_classes() -> dict:
                 preferences.setdefault(provider_id, True)
                 updated["launch_on_bridge_start_by_provider"] = preferences
             hotkey_source = (
-                config.VOICE_HOTKEY_SOURCE_AUTO
+                config.VOICE_HOTKEY_SOURCE_DEFAULT
+                if read_result.code == "no_hotkey"
+                else config.VOICE_HOTKEY_SOURCE_AUTO
                 if read_result.ok and read_result.code != "manual"
                 else None
             )
-            allow_empty_hotkey = not read_result.ok and not selected_hotkey.strip()
+            allow_empty_hotkey = (
+                provider_id in voice_program_manager.LOCAL_VOICE_PROVIDERS
+                or (not read_result.ok and not selected_hotkey.strip())
+            )
             if not self._update_and_persist_voice_program(
                 updated,
                 hotkey_source=hotkey_source,
@@ -5609,12 +5797,97 @@ def _load_qt_classes() -> dict:
             ),
             notify=selectedVoiceProgramIndexChanged,
         )
+        voiceProgramFasterWhisperSelected = Property(
+            bool,
+            lambda self: self._selected_voice_program_is(voice_program_manager.VOICE_PROGRAM_FASTER_WHISPER),
+            notify=selectedVoiceProgramIndexChanged,
+        )
+        voiceProgramParaformerSelected = Property(
+            bool,
+            lambda self: self._selected_voice_program_is(voice_program_manager.VOICE_PROGRAM_PARAFORMER),
+            notify=selectedVoiceProgramIndexChanged,
+        )
+        voiceProgramQwenSelected = Property(
+            bool,
+            lambda self: self._selected_voice_program_is(voice_program_manager.VOICE_PROGRAM_QWEN3_ASR),
+            notify=selectedVoiceProgramIndexChanged,
+        )
+        voiceProgramNanoSelected = Property(
+            bool,
+            lambda self: self._selected_voice_program_is(voice_program_manager.VOICE_PROGRAM_FUN_ASR_NANO),
+            notify=selectedVoiceProgramIndexChanged,
+        )
         voiceProgramCustomSelected = Property(
             bool,
             lambda self: self._selected_voice_program_is(
                 voice_program_manager.VOICE_PROGRAM_CUSTOM
             ),
             notify=selectedVoiceProgramIndexChanged,
+        )
+
+        def _faster_whisper_setting_index(self, key: str) -> int:
+            choices = self._FASTER_WHISPER_SETTING_CHOICES[key]
+            try:
+                return choices.index(self._voice_program_settings.get(key))
+            except ValueError:
+                return 0
+
+        def _set_faster_whisper_setting_index(self, key: str, index: int) -> None:
+            if (
+                self._voice_program_settings.get("provider") not in voice_program_manager.LOCAL_VOICE_PROVIDERS
+                or self._voice_hotkey_busy
+                or self._voice_settings_write_start_blocked()
+            ):
+                return
+            choices = self._FASTER_WHISPER_SETTING_CHOICES[key]
+            if not 0 <= index < len(choices):
+                return
+            value = choices[index]
+            if value == self._voice_program_settings.get(key):
+                return
+            updated = dict(self._voice_program_settings)
+            updated[key] = value
+            self._update_and_persist_voice_program(
+                updated,
+                hotkey_source=config.VOICE_HOTKEY_SOURCE_DEFAULT,
+                allow_empty_hotkey=True,
+            )
+
+        fasterWhisperModelIndex = Property(
+            int,
+            lambda self: self._faster_whisper_setting_index(
+                "faster_whisper_model"
+            ),
+            lambda self, value: self._set_faster_whisper_setting_index(
+                "faster_whisper_model", value
+            ),
+            notify=fasterWhisperSettingsChanged,
+        )
+        localSpeechThreadsIndex = Property(
+            int,
+            lambda self: self._faster_whisper_setting_index("faster_whisper_threads"),
+            lambda self, value: self._set_faster_whisper_setting_index("faster_whisper_threads", value),
+            notify=fasterWhisperSettingsChanged,
+        )
+        fasterWhisperThreadsIndex = Property(
+            int,
+            lambda self: self._faster_whisper_setting_index(
+                "faster_whisper_threads"
+            ),
+            lambda self, value: self._set_faster_whisper_setting_index(
+                "faster_whisper_threads", value
+            ),
+            notify=fasterWhisperSettingsChanged,
+        )
+        fasterWhisperBeamSizeIndex = Property(
+            int,
+            lambda self: self._faster_whisper_setting_index(
+                "faster_whisper_beam_size"
+            ),
+            lambda self, value: self._set_faster_whisper_setting_index(
+                "faster_whisper_beam_size", value
+            ),
+            notify=fasterWhisperSettingsChanged,
         )
 
         def _get_voice_program_system_managed(self) -> bool:
@@ -5736,7 +6009,11 @@ def _load_qt_classes() -> dict:
             return self._voice_program_settings.get("launch_elevated") is True
 
         def _set_voice_program_launch_elevated(self, value: bool) -> None:
-            if self._voice_hotkey_busy or self._voice_settings_write_start_blocked():
+            if (
+                self._voice_program_settings.get("provider") in voice_program_manager.LOCAL_VOICE_PROVIDERS
+                or self._voice_hotkey_busy
+                or self._voice_settings_write_start_blocked()
+            ):
                 return
             value = bool(value)
             if value == self._get_voice_program_launch_elevated():
@@ -5877,6 +6154,11 @@ def _load_qt_classes() -> dict:
             bool,
             _button_receiver_usable,
             notify=trayStateChanged,
+        )
+        voiceActivityState = Property(
+            str,
+            lambda self: self._voice_activity_state,
+            notify=voiceActivityChanged,
         )
         voiceRuntimeState = Property(
             str,
@@ -6404,6 +6686,45 @@ def _load_qt_classes() -> dict:
             str, lambda self: settings_ui._REFERENCE_ACTION_LABELS[key_mapping.ActionKind.OPEN_PROGRAM],
             constant=True,
         )
+
+        storeApps = Property("QVariantList", lambda self: self._store_apps, notify=storeAppsChanged)
+        storeAppsBusy = Property(bool, lambda self: self._store_apps_busy, notify=storeAppsChanged)
+        storeAppsError = Property(str, lambda self: self._store_apps_error, notify=storeAppsChanged)
+
+        @Slot()
+        def refreshStoreApps(self) -> None:
+            if self._store_apps_busy or self._application_exit_intent.is_set():
+                return
+            self._store_apps_busy = True
+            self._store_apps_error = ""
+            self.storeAppsChanged.emit()
+            def scan():
+                from . import store_apps_windows
+                try:
+                    result = (store_apps_windows.installed_apps(), "")
+                except Exception:
+                    result = ([], "读取应用列表失败，请重试，或浏览选择程序文件。")
+                try:
+                    self._storeAppsReady.emit(result)
+                except RuntimeError:
+                    pass
+            try:
+                threading.Thread(target=scan, name="installed-store-apps", daemon=True).start()
+            except Exception:
+                self._store_apps_busy = False
+                self._store_apps_error = "无法读取应用列表，请重试。"
+                self.storeAppsChanged.emit()
+
+        @Slot(object)
+        def _on_store_apps_ready(self, payload) -> None:
+            if self._background_shutdown_event.is_set():
+                return
+            rows, error = payload
+            self._store_apps_busy = False
+            self._store_apps_error = error
+            if not error:
+                self._store_apps = rows
+            self.storeAppsChanged.emit()
 
         @Slot(str, result=str)
         def programPathFromFileUrl(self, value: str) -> str:
@@ -7256,6 +7577,10 @@ def _load_qt_classes() -> dict:
             if provider_id in {
                 voice_program_manager.VOICE_PROGRAM_NONE,
                 voice_program_manager.VOICE_PROGRAM_CUSTOM,
+                voice_program_manager.VOICE_PROGRAM_FASTER_WHISPER,
+                voice_program_manager.VOICE_PROGRAM_PARAFORMER,
+                voice_program_manager.VOICE_PROGRAM_FUN_ASR_NANO,
+                voice_program_manager.VOICE_PROGRAM_QWEN3_ASR,
             }:
                 self._clear_pending_voice_hotkey_load()
                 return
@@ -7449,6 +7774,8 @@ def _load_qt_classes() -> dict:
             feedback_page_index: int,
             prior_error: str = "",
         ) -> None:
+            if self._voice_program_settings.get("provider") in voice_program_manager.LOCAL_VOICE_PROVIDERS:
+                return
             if self._voice_hotkey_busy or self._voice_settings_write_start_blocked():
                 return
             settings_snapshot = dict(self._voice_program_settings)
@@ -8967,6 +9294,8 @@ def _load_qt_classes() -> dict:
 
         @Slot()
         def openVoiceProgramSettings(self) -> None:
+            if self._voice_program_settings.get("provider") in voice_program_manager.LOCAL_VOICE_PROVIDERS:
+                return
             try:
                 target = (
                     voice_program_manager.resolve_voice_program_settings_target(

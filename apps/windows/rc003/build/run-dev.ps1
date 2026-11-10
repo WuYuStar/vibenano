@@ -10,8 +10,12 @@
     candidate build can stop only this development session.
 #>
 
+param(
+    [string]$PythonExecutable = ""
+)
+
 $ErrorActionPreference = "Stop"
-$RC003Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$RC003Root = [System.IO.Path]::GetFullPath((Resolve-Path (Join-Path $PSScriptRoot "..")).ProviderPath)
 $VenvPythonw = Join-Path $RC003Root ".venv\Scripts\pythonw.exe"
 $ProductName = -join @(
     [char]0x65E0,
@@ -35,6 +39,13 @@ function Show-LaunchError([string]$Message) {
 }
 
 try {
+    if ($PythonExecutable) {
+        $VenvPythonw = (Resolve-Path -LiteralPath $PythonExecutable).ProviderPath
+        $WindowedPython = Join-Path (Split-Path -Parent $VenvPythonw) "pythonw.exe"
+        if (Test-Path -LiteralPath $WindowedPython -PathType Leaf) {
+            $VenvPythonw = $WindowedPython
+        }
+    }
     if (-not (Test-Path -LiteralPath $VenvPythonw -PathType Leaf)) {
         throw "The local .venv is missing. Install the development requirements first."
     }

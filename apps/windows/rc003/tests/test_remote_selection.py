@@ -757,6 +757,60 @@ class SelectionControllerTests(unittest.TestCase):
         self.assertTrue(notified)
         self.assertFalse(controller._has_unsaved_non_mapping_settings())
 
+    def test_faster_whisper_settings_reload_per_device_without_hotkey_reads(self):
+        controller = self.seed_chromecast()
+        path = config.config_path(config.config_root())
+        bindings_path = config.key_bindings_path(config.config_root())
+
+        config.switch_remote_settings(
+            path, bindings_path, selection.select_device(controller._remote_selection(), B)
+        )
+        saved = config.load_config(path)
+        saved["voice_program"] = dict(
+            saved["voice_program"],
+            provider="fun_asr_nano",
+            faster_whisper_model="base",
+            faster_whisper_threads=2,
+            faster_whisper_beam_size=5,
+        )
+        config.set_voice_hotkey_for_provider(saved, "fun_asr_nano", "")
+        config.save_config(path, saved)
+
+        config.switch_remote_settings(
+            path, bindings_path, selection.select_device(saved[selection.KEY], A)
+        )
+        saved = config.load_config(path)
+        saved["voice_program"] = dict(
+            saved["voice_program"],
+            provider="fun_asr_nano",
+            faster_whisper_model="tiny",
+            faster_whisper_threads=8,
+            faster_whisper_beam_size=2,
+        )
+        config.set_voice_hotkey_for_provider(saved, "fun_asr_nano", "")
+        config.save_config(path, saved)
+
+        self._voice_hotkey_read_mock.reset_mock()
+        with mock.patch.object(controller, "_refresh_bridge_status", return_value=False):
+            controller.useRemoteDevice(B)
+            self.assertEqual(controller.activeRemoteKey, B)
+            self.assertTrue(controller.voiceProgramNanoSelected)
+            self.assertEqual(controller.fasterWhisperModelIndex, 1)
+            self.assertEqual(controller.fasterWhisperThreadsIndex, 1)
+            self.assertEqual(controller.fasterWhisperBeamSizeIndex, 2)
+            self.assertEqual(controller.holdVoiceHotkeyText, "")
+
+            controller.useRemoteDevice(A)
+            self.assertEqual(controller.activeRemoteKey, A)
+            self.assertTrue(controller.voiceProgramNanoSelected)
+            self.assertEqual(controller.fasterWhisperModelIndex, 0)
+            self.assertEqual(controller.fasterWhisperThreadsIndex, 3)
+            self.assertEqual(controller.fasterWhisperBeamSizeIndex, 1)
+            self.assertEqual(controller.holdVoiceHotkeyText, "")
+
+        self._voice_hotkey_read_mock.assert_not_called()
+        self._voice_program_launch_mock.assert_not_called()
+
     def _seed_chatterfly_switch(self, *, source="auto", provider="chatterfly"):
         path = config.config_path(config.config_root())
         bindings_path = config.key_bindings_path(config.config_root())
@@ -1368,9 +1422,13 @@ if profile_b == 'chromecast-remote':
     image_left = photo.mapToItem(item('mappingLines'), QPointF(
         (photo.property('width') - photo.property('paintedWidth')) / 2, 0)).x()
     image_right = image_left + photo.property('paintedWidth')
-    for button in ('up', 'left', 'down', 'back', 'home', 'youtube', 'power',
-                   'right', 'ok', 'volume_up', 'volume_down', 'mic', 'volume_mute', 'netflix', 'input_source'):
-        engine.globalObject().setProperty('probeCard', engine.newQObject(item('editMapping_' + button)))
+    # Reuse references only within this static geometry snapshot. Repeatedly
+    # walking the visual tree for each inequality makes the scaled probe time out.
+    geometry_buttons = ('up', 'left', 'down', 'back', 'home', 'youtube', 'power',
+                        'right', 'ok', 'volume_up', 'volume_down', 'mic', 'volume_mute', 'netflix', 'input_source')
+    geometry_cards = {button: item('editMapping_' + button) for button in geometry_buttons}
+    for button in geometry_buttons:
+        engine.globalObject().setProperty('probeCard', engine.newQObject(geometry_cards[button]))
         engine.globalObject().setProperty('probeHotspot', engine.newQObject(item('photoHotspot_' + button)))
         route_value = engine.evaluate('probePage.connectorRoute(probeCard, probeHotspot, probeCanvas)')
         assert not route_value.isError(), route_value.toString()
@@ -1383,7 +1441,7 @@ if profile_b == 'chromecast-remote':
         assert abs(abs(route['control2X'] - route['endX']) - radius) < 1e-6, (button, route)
         assert image_left <= route['endX'] <= image_right, (button, route)
     def card_point(button):
-        return item('editMapping_' + button).mapToItem(board, QPointF(0, 0))
+        return geometry_cards[button].mapToItem(board, QPointF(0, 0))
     for left, right in [('back', 'mic'), ('home', 'volume_mute'),
                         ('youtube', 'netflix'), ('power', 'input_source')]:
         a, b = card_point(left), card_point(right)
@@ -1392,7 +1450,7 @@ if profile_b == 'chromecast-remote':
     for column_buttons in [('up', 'left', 'down', 'back', 'home', 'youtube', 'power'),
                            ('ok', 'right', 'volume_up', 'volume_down', 'mic', 'volume_mute', 'netflix', 'input_source')]:
         for previous, following in zip(column_buttons, column_buttons[1:]):
-            previous_bottom = card_point(previous).y() + item('editMapping_' + previous).property('height')
+            previous_bottom = card_point(previous).y() + geometry_cards[previous].property('height')
             assert abs(card_point(following).y() - previous_bottom - 2) < 1, (previous, following)
     assert card_point('up').y() < card_point('left').y() < card_point('down').y() < card_point('back').y()
     assert card_point('volume_up').x() == card_point('volume_down').x() == card_point('mic').x()
@@ -1405,7 +1463,7 @@ if profile_b == 'chromecast-remote':
         board.setProperty('contentY', board.property('contentHeight') - board.property('height'))
         app.processEvents()
         for button in ('power', 'input_source'):
-            bottom_card = item('editMapping_' + button)
+            bottom_card = geometry_cards[button]
             bottom = bottom_card.mapToItem(board, QPointF(0, bottom_card.property('height'))).y()
             assert bottom <= board.property('height') + 1
         board.setProperty('contentY', 0)

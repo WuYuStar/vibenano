@@ -5,12 +5,13 @@
 #>
 
 param(
-    [string]$ShortcutPath
+    [string]$ShortcutPath,
+    [string]$PythonExecutable = ""
 )
 
 $ErrorActionPreference = "Stop"
-$RC003Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$RunScript = (Resolve-Path (Join-Path $PSScriptRoot "run-dev.ps1")).Path
+$RC003Root = [System.IO.Path]::GetFullPath((Resolve-Path (Join-Path $PSScriptRoot "..")).ProviderPath)
+$RunScript = (Resolve-Path (Join-Path $PSScriptRoot "run-dev.ps1")).ProviderPath
 $ProductName = -join @(
     [char]0x65E0,
     [char]0x7EBF,
@@ -42,6 +43,10 @@ if (Test-Path -LiteralPath $WindowsPowerShellExe -PathType Leaf) {
     }
 }
 $ShortcutArguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""$RunScript"""
+if ($PythonExecutable) {
+    $PythonExecutable = (Resolve-Path -LiteralPath $PythonExecutable).ProviderPath
+    $ShortcutArguments += " -PythonExecutable ""$PythonExecutable"""
+}
 $Shell = New-Object -ComObject WScript.Shell
 
 if ($UsesDefaultShortcutPath) {

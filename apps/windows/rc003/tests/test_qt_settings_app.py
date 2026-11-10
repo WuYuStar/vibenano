@@ -2220,7 +2220,10 @@ class SettingsControllerTests(unittest.TestCase):
         self.assertEqual(controller.voiceProgramOptions[2], "微信输入法")
         self.assertEqual(controller.voiceProgramOptions[3], "豆包输入法")
         self.assertEqual(controller.voiceProgramOptions[4], "Chatterfly")
-        self.assertEqual(len(controller.voiceProgramOptions), 5)
+        self.assertEqual(
+            controller.voiceProgramOptions[5], "中英混合识别 (Fun-ASR-Nano)"
+        )
+        self.assertEqual(len(controller.voiceProgramOptions), 6)
         self.assertNotIn("自定义程序", controller.voiceProgramOptions)
         self.assertEqual(controller.selectedVoiceProgramIndex, 0)
         self.assertFalse(controller.voiceProgramSystemManaged)
@@ -2468,6 +2471,89 @@ class SettingsControllerTests(unittest.TestCase):
         saved = config.load_config(config.config_path(config.config_root()))
         self.assertEqual(saved["voice_program"]["provider"], "chatterfly")
         self.assertEqual(config.voice_hotkey_for_provider(saved, "chatterfly"), "")
+
+    def test_faster_whisper_settings_are_local_atomic_and_survive_reopen(self):
+        controller, _ = self._make_controller()
+        self._voice_hotkey_read_mock.reset_mock()
+
+        controller.selectVoiceProgramMenuOption(4)
+
+        self.assertTrue(controller.voiceProgramNanoSelected)
+        self.assertEqual(controller.selectedVoiceProgramIndex, 8)
+        self.assertEqual(controller.voiceProgramMenuIndex, 4)
+        self.assertFalse(controller.voiceProgramSystemManaged)
+        self.assertFalse(controller.voiceProgramLaunchable)
+        self.assertFalse(controller.voiceProgramLaunchOnBridgeStart)
+        self.assertFalse(controller.voiceHotkeyBusy)
+        self.assertEqual(controller.holdVoiceHotkeyText, "")
+        self.assertEqual(controller.fasterWhisperModelIndex, 2)
+        self.assertEqual(controller.fasterWhisperThreadsIndex, 2)
+        self.assertEqual(controller.fasterWhisperBeamSizeIndex, 0)
+        self._voice_hotkey_read_mock.assert_not_called()
+        self._profile_selection_mock.assert_not_called()
+        self._voice_program_launch_mock.assert_not_called()
+
+        controller.refreshVoiceHotkeyFromProvider()
+        controller.loadVoiceHotkeyFromProvider()
+        controller.holdVoiceHotkeyText = "ctrl+f9"
+        controller.launchVoiceProgram()
+        controller.voiceProgramLaunchElevated = True
+        with mock.patch.object(
+            voice_program_manager, "resolve_voice_program_settings_target"
+        ) as resolve_settings:
+            controller.openVoiceProgramSettings()
+        resolve_settings.assert_not_called()
+        self._voice_hotkey_read_mock.assert_not_called()
+        self._voice_hotkey_sync_mock.assert_not_called()
+        self._voice_program_launch_mock.assert_not_called()
+        self.assertEqual(controller.holdVoiceHotkeyText, "")
+        self.assertFalse(controller.voiceProgramLaunchElevated)
+
+        with mock.patch.object(
+            config, "save_config_and_load", side_effect=OSError("locked")
+        ):
+            controller.fasterWhisperModelIndex = 1
+        self.assertEqual(controller.fasterWhisperModelIndex, 2)
+        self.assertFalse(controller.voiceProgramSettingsDirty)
+
+        controller.fasterWhisperModelIndex = 0
+        controller.fasterWhisperThreadsIndex = 3
+        controller.fasterWhisperBeamSizeIndex = 2
+        saved = config.load_config(config.config_path(config.config_root()))
+        self.assertEqual(saved["voice_program"]["provider"], "fun_asr_nano")
+        self.assertEqual(saved["voice_program"]["faster_whisper_model"], "tiny")
+        self.assertEqual(saved["voice_program"]["faster_whisper_threads"], 8)
+        self.assertEqual(saved["voice_program"]["faster_whisper_beam_size"], 5)
+        self.assertEqual(
+            config.voice_hotkey_for_provider(saved, "fun_asr_nano"), ""
+        )
+
+        reopened, _ = self._make_controller()
+        self.assertTrue(reopened.voiceProgramNanoSelected)
+        self.assertEqual(reopened.fasterWhisperModelIndex, 0)
+        self.assertEqual(reopened.fasterWhisperThreadsIndex, 3)
+        self.assertEqual(reopened.fasterWhisperBeamSizeIndex, 2)
+        self.assertEqual(reopened.holdVoiceHotkeyText, "")
+        reopened._endpoint_values = [
+            audio_output.AudioEndpoint("Local unused endpoint", "test")
+        ]
+        reopened._endpoint_options = ["Local unused endpoint — test"]
+        reopened._selected_endpoint_index = 0
+        with mock.patch.object(
+            reopened, "_request_endpoint_preflight"
+        ) as preflight, mock.patch.object(
+            settings_ui, "build_save_model", wraps=settings_ui.build_save_model
+        ) as build_save:
+            self.assertTrue(reopened._save(), reopened.errorMessage)
+        preflight.assert_not_called()
+        self.assertFalse(build_save.call_args.kwargs["validate_voice_hotkeys"])
+
+        reopened.selectedVoiceProgramIndex = 2
+        with mock.patch.object(
+            settings_ui, "build_save_model", wraps=settings_ui.build_save_model
+        ) as build_save:
+            self.assertTrue(reopened._save(), reopened.errorMessage)
+        self.assertTrue(build_save.call_args.kwargs["validate_voice_hotkeys"])
 
     def test_selecting_doubao_uses_the_direct_adapter_without_autostart(self):
         controller, _ = self._make_controller()
@@ -3323,7 +3409,10 @@ class SettingsControllerTests(unittest.TestCase):
         self.assertEqual(controller.voiceProgramOptions[2], "微信输入法")
         self.assertEqual(controller.voiceProgramOptions[3], "豆包输入法")
         self.assertEqual(controller.voiceProgramOptions[4], "Chatterfly")
-        self.assertEqual(len(controller.voiceProgramOptions), 5)
+        self.assertEqual(
+            controller.voiceProgramOptions[5], "中英混合识别 (Fun-ASR-Nano)"
+        )
+        self.assertEqual(len(controller.voiceProgramOptions), 6)
 
     def test_unrelated_mapping_edit_does_not_mark_voice_program_dirty(self):
         controller, model = self._make_controller()
@@ -3412,6 +3501,9 @@ class SettingsControllerTests(unittest.TestCase):
             saved["voice_program"],
             {
                 "provider": "custom",
+                "faster_whisper_model": "small",
+                "faster_whisper_threads": 4,
+                "faster_whisper_beam_size": 1,
                 "custom_executable": str(executable),
                 "launch_on_bridge_start": True,
                 "launch_on_bridge_start_by_provider": {"custom": True},
@@ -5069,6 +5161,29 @@ class SettingsControllerTests(unittest.TestCase):
                 self.assertIn("已收到声音，未确认微信开麦", text)
                 self.assertIn("若未输入文字，请松开后重试", text)
                 self.assertNotIn("启动失败", text)
+
+    def test_faster_whisper_runtime_status_never_recommends_wetype(self):
+        from ovb_rc003 import remote_selection
+
+        controller, _ = self._make_controller()
+        status = bridge_runtime_status.BridgeRuntimeStatus(
+            schema=bridge_runtime_status.SCHEMA_VERSION,
+            state=bridge_runtime_status.BridgeConnectionState.CONNECTED,
+            pid=4321,
+            updated_at=time.time(),
+            raw_input_state="ready",
+            hid_tap_state="ready",
+            voice_key_physicalizer_state="ready",
+            voice_runtime_state="model_loading",
+            voice_runtime_provider="fun_asr_nano",
+        )
+        for profile in (remote_selection.RC003_PROFILE, remote_selection.CHROMECAST_PROFILE):
+            with self.subTest(profile=profile), mock.patch.object(
+                remote_selection, "active_profile", return_value=profile
+            ):
+                text = controller._describe_runtime_status(status)
+                self.assertIn("正在加载/下载模型", text)
+                self.assertNotIn("微信", text)
 
     def test_legacy_bridge_recommends_manual_restart_without_auto_stopping(self):
         self._bridge_status_patch.stop()
@@ -10078,15 +10193,22 @@ from PySide6.QtTest import QTest
 from ovb_rc003 import qt_settings_app as m
 
 
-def find_child(root, name):
+def find_child(root, name, seen=None):
+    # QObject ownership and visual parents can expose the same subtree twice.
+    # Visit each object once while preserving the original depth-first order.
+    if seen is None:
+        seen = {root}
     children = list(root.children())
     child_items = getattr(root, "childItems", None)
     if callable(child_items):
-        children.extend(child for child in child_items() if child not in children)
+        children.extend(child_items())
     for child in children:
+        if child in seen:
+            continue
+        seen.add(child)
         if child.objectName() == name:
             return child
-        found = find_child(child, name)
+        found = find_child(child, name, seen)
         if found is not None:
             return found
     return None
@@ -10275,15 +10397,22 @@ from ovb_rc003 import qt_settings_app as m
 u.claim_daily_update_check = lambda _cache: False
 
 
-def find_child(root, name):
+def find_child(root, name, seen=None):
+    # QObject ownership and visual parents can expose the same subtree twice.
+    # Visit each object once while preserving the original depth-first order.
+    if seen is None:
+        seen = {root}
     children = list(root.children())
     child_items = getattr(root, "childItems", None)
     if callable(child_items):
-        children.extend(child for child in child_items() if child not in children)
+        children.extend(child_items())
     for child in children:
+        if child in seen:
+            continue
+        seen.add(child)
         if child.objectName() == name:
             return child
-        found = find_child(child, name)
+        found = find_child(child, name, seen)
         if found is not None:
             return found
     return None
@@ -10636,15 +10765,22 @@ from PySide6.QtCore import QPointF
 from ovb_rc003 import qt_settings_app as m
 
 
-def find_child(root, name):
+def find_child(root, name, seen=None):
+    # QObject ownership and visual parents can expose the same subtree twice.
+    # Visit each object once while preserving the original depth-first order.
+    if seen is None:
+        seen = {root}
     children = list(root.children())
     child_items = getattr(root, "childItems", None)
     if callable(child_items):
-        children.extend(child for child in child_items() if child not in children)
+        children.extend(child_items())
     for child in children:
+        if child in seen:
+            continue
+        seen.add(child)
         if child.objectName() == name:
             return child
-        found = find_child(child, name)
+        found = find_child(child, name, seen)
         if found is not None:
             return found
     return None
@@ -11093,15 +11229,22 @@ from PySide6.QtTest import QTest
 from ovb_rc003 import qt_settings_app as m
 
 
-def find_child(root, name):
+def find_child(root, name, seen=None):
+    # QObject ownership and visual parents can expose the same subtree twice.
+    # Visit each object once while preserving the original depth-first order.
+    if seen is None:
+        seen = {root}
     children = list(root.children())
     child_items = getattr(root, "childItems", None)
     if callable(child_items):
-        children.extend(child for child in child_items() if child not in children)
+        children.extend(child_items())
     for child in children:
+        if child in seen:
+            continue
+        seen.add(child)
         if child.objectName() == name:
             return child
-        found = find_child(child, name)
+        found = find_child(child, name, seen)
         if found is not None:
             return found
     return None
@@ -11388,15 +11531,22 @@ from PySide6.QtTest import QTest
 from ovb_rc003 import qt_settings_app as m
 
 
-def find_child(root, name):
+def find_child(root, name, seen=None):
+    # QObject ownership and visual parents can expose the same subtree twice.
+    # Visit each object once while preserving the original depth-first order.
+    if seen is None:
+        seen = {root}
     children = list(root.children())
     child_items = getattr(root, "childItems", None)
     if callable(child_items):
-        children.extend(child for child in child_items() if child not in children)
+        children.extend(child_items())
     for child in children:
+        if child in seen:
+            continue
+        seen.add(child)
         if child.objectName() == name:
             return child
-        found = find_child(child, name)
+        found = find_child(child, name, seen)
         if found is not None:
             return found
     return None
@@ -11773,15 +11923,22 @@ from PySide6.QtCore import QMetaObject, QPointF, Qt
 from ovb_rc003 import qt_settings_app as m
 
 
-def find_child(root, name):
+def find_child(root, name, seen=None):
+    # QObject ownership and visual parents can expose the same subtree twice.
+    # Visit each object once while preserving the original depth-first order.
+    if seen is None:
+        seen = {root}
     children = list(root.children())
     child_items = getattr(root, "childItems", None)
     if callable(child_items):
-        children.extend(child for child in child_items() if child not in children)
+        children.extend(child_items())
     for child in children:
+        if child in seen:
+            continue
+        seen.add(child)
         if child.objectName() == name:
             return child
-        found = find_child(child, name)
+        found = find_child(child, name, seen)
         if found is not None:
             return found
     return None
@@ -12067,6 +12224,35 @@ print(json.dumps(result))
 """
 
 
+class FasterWhisperRuntimeStatusTextTests(unittest.TestCase):
+    def test_every_local_runtime_state_has_sensible_private_text(self):
+        expected = {
+            "not_tested": "待识别",
+            "model_loading": "正在加载/下载模型",
+            "active": "录音中",
+            "receiving_audio": "录音中",
+            "transcribing": "正在识别",
+            "finishing": "正在识别",
+            "success": "识别完成（文字粘贴已提交）",
+            "audio_empty": "未识别到文字/未收到声音",
+            "unavailable": "识别组件或模型不可用",
+            "failed": "识别失败",
+            "busy": "上一段仍在识别，请稍后",
+            "text_submit_failed": "文字输入失败（焦点变化或目标不可用）",
+            "host_start_failed": "无法开始本地录音",
+        }
+        for state, text in expected.items():
+            with self.subTest(state=state):
+                self.assertEqual(
+                    qt_settings_app._faster_whisper_runtime_status_text(state),
+                    text,
+                )
+        self.assertEqual(
+            qt_settings_app._faster_whisper_runtime_status_text("unknown"),
+            "待识别",
+        )
+
+
 class SettingsShellSourceContractTests(unittest.TestCase):
     def setUp(self):
         qml_dir = Path(qt_settings_app.__file__).resolve().parent / "qml"
@@ -12282,7 +12468,10 @@ class SettingsShellSourceContractTests(unittest.TestCase):
         self.assertNotIn("comboMapping", self.tokens_qml)
 
     def test_all_selectors_reuse_one_selected_option_delegate(self):
-        self.assertEqual(self.voice_qml.count("SelectionComboBox {"), 4)
+        self.assertEqual(self.voice_qml.count("SelectionComboBox {"), 5)
+        self.assertIn('objectName: "nanoThreadsCombo"', self.voice_qml)
+        self.assertNotIn('objectName: "fasterWhisperModelCombo"', self.voice_qml)
+        self.assertNotIn('objectName: "fasterWhisperBeamSizeCombo"', self.voice_qml)
         self.assertIn(
             "recommendedIndex: SettingsController.recommendedEndpointIndex",
             self.voice_qml,
@@ -12891,7 +13080,9 @@ class SettingsShellSourceContractTests(unittest.TestCase):
         self.assertIn("optionDelegate.highlighted", self.buttons_qml)
         self.assertNotIn('objectName: "mappingListFrame"', self.buttons_qml)
         self.assertIn("property int count: SettingsController.isRc003Device ? 13 : 15", self.buttons_qml)
-        self.assertNotIn("ListView {", self.buttons_qml)
+        # Only the installed-app picker is a list; button mappings retain cards.
+        self.assertEqual(self.buttons_qml.count("ListView {"), 1)
+        self.assertIn('objectName: "storeAppList"', self.buttons_qml)
         self.assertNotIn('objectName: "voiceSettingsPanel"', self.buttons_qml)
         self.assertNotIn('objectName: "voiceProgramDialog"', self.buttons_qml)
         self.assertIn('objectName: "voiceProgramCombo"', self.voice_qml)
@@ -13199,6 +13390,58 @@ class ThreePageSettingsSourceContractTests(unittest.TestCase):
         )
         self.assertNotIn('objectName: "voiceProgramStatusRefreshTimer"', self.voice_qml)
         self.assertIn("readonly property bool voiceHotkeyBusy", self.voice_qml)
+
+    def test_faster_whisper_local_ui_and_save_source_contract(self):
+        for object_name in (
+            "nanoSettingsRow",
+            "nanoThreadsCombo",
+            "fasterWhisperModelNotice",
+            "fasterWhisperRuntimeText",
+        ):
+            self.assertIn(f'objectName: "{object_name}"', self.voice_qml)
+        self.assertIn(
+            "SettingsController.voiceProgramNanoSelected", self.voice_qml
+        )
+        self.assertIn(
+            "visible: root.voiceProgramManaged && !root.localSpeechSelected",
+            self.voice_qml,
+        )
+        for object_name in ("virtualAudioRow", "outputEndpointRow", "voiceTestSection"):
+            block = self.voice_qml.split(f'objectName: "{object_name}"', 1)[1]
+            self.assertIn("visible: !root.localSpeechSelected", block[:160])
+        self.assertIn(
+            'String(SettingsController.voiceRuntimeProvider) === "fun_asr_nano"',
+            self.voice_qml,
+        )
+        self.assertIn(
+            "在本机离线识别中英文：按住说话，松开后输出文字。首次加载需等待，退出会释放模型内存。",
+            self.voice_qml,
+        )
+        self.assertNotIn("模型已下载", self.voice_qml)
+        self.assertNotIn("识别组件已安装", self.voice_qml)
+        for text in (
+            "正在加载/下载模型", "录音中", "正在识别",
+            "识别完成（文字粘贴已提交）", "未识别到文字/未收到声音",
+            "识别组件或模型不可用", "识别失败", "上一段仍在识别，请稍后",
+            "文字输入失败（焦点变化或目标不可用）", "无法开始本地录音", "待识别",
+        ):
+            self.assertIn(text, self.voice_qml)
+        recording_block = self.voice_qml.split(
+            'objectName: "remoteRecordingModeRow"', 1
+        )[1].split('objectName: "nanoSettingsRow"', 1)[0]
+        self.assertIn("visible: !SettingsController.isRc003Device", recording_block)
+        self.assertNotIn("visible: !root.localSpeechSelected", recording_block)
+
+        controller_source = Path(qt_settings_app.__file__).read_text(encoding="utf-8")
+        self.assertIn("validate_voice_hotkeys=not local_voice_provider", controller_source)
+        self.assertIn("and not local_voice_provider", controller_source)
+        self.assertIn('voice_program_manager.VOICE_PROGRAM_FASTER_WHISPER,', controller_source)
+        for property_name in (
+            "fasterWhisperModelIndex",
+            "fasterWhisperThreadsIndex",
+            "fasterWhisperBeamSizeIndex",
+        ):
+            self.assertIn(property_name, controller_source)
 
     def test_voice_audio_rows_auto_save_and_keep_manual_privacy_only(self):
         for object_name in (

@@ -59,6 +59,9 @@ class VoiceProgramSettingsTests(unittest.TestCase):
                     "sogou": True,
                     "custom": False,
                 },
+                "faster_whisper_model": "small",
+                "faster_whisper_threads": 4,
+                "faster_whisper_beam_size": 1,
             },
         )
 
@@ -82,6 +85,9 @@ class VoiceProgramSettingsTests(unittest.TestCase):
                     "sogou": False,
                     "custom": False,
                 },
+                "faster_whisper_model": "small",
+                "faster_whisper_threads": 4,
+                "faster_whisper_beam_size": 1,
             },
         )
 
@@ -135,6 +141,9 @@ class VoiceProgramSettingsTests(unittest.TestCase):
                     "sogou": True,
                     "custom": True,
                 },
+                "faster_whisper_model": "small",
+                "faster_whisper_threads": 4,
+                "faster_whisper_beam_size": 1,
             },
         )
 
@@ -197,25 +206,15 @@ class VoiceProgramSettingsTests(unittest.TestCase):
         self.assertFalse(sogou["launch_elevated"])
         self.assertTrue(custom["launch_elevated"])
 
-    def test_provider_options_exclude_legacy_custom_without_losing_its_identity(self):
-        self.assertEqual(
-            manager.provider_options(),
-            [
-                "请选择语音程序",
-                "搜狗语音输入",
-                "微信输入法",
-                "豆包输入法",
-                "Chatterfly",
-            ],
-        )
+    def test_provider_options_exclude_retired_models_but_keep_legacy_indices(self):
+        self.assertEqual(manager.provider_options(), ["请选择语音程序", "搜狗语音输入", "微信输入法",
+            "豆包输入法", "Chatterfly", "中英混合识别 (Fun-ASR-Nano)"])
         self.assertEqual(manager.provider_index("custom"), 4)
         self.assertEqual(manager.provider_id_for_index(4), "custom")
         self.assertEqual(manager.provider_index("chatterfly"), 5)
-        self.assertEqual(manager.provider_id_for_index(5), "chatterfly")
-        self.assertEqual(
-            manager.normalize_voice_program_settings({"provider": "custom"})["provider"],
-            "custom",
-        )
+        for old in ("faster_whisper", "paraformer_streaming", "qwen3_asr"):
+            self.assertEqual(manager.provider_index(old), manager.provider_index("fun_asr_nano"))
+        self.assertEqual(manager.VOICE_PROGRAM_SELECTABLE_PROVIDER_ORDER[-1], "fun_asr_nano")
 
     def test_system_managed_provider_never_requests_bridge_autostart(self):
         normalized = manager.normalize_voice_program_settings(
@@ -256,6 +255,105 @@ class VoiceProgramSettingsTests(unittest.TestCase):
         self.assertFalse(normalized["launch_on_bridge_start"])
         self.assertFalse(manager.is_system_managed_provider("doubao_ime"))
         self.assertFalse(manager.is_launchable_provider("doubao_ime"))
+
+
+class FasterWhisperProviderTests(unittest.TestCase):
+    def test_engine_settings_are_normalized_and_survive_provider_switches(self):
+        normalized = manager.normalize_voice_program_settings({
+            "provider": "faster_whisper",
+            "faster_whisper_model": "base",
+            "faster_whisper_threads": 2,
+            "faster_whisper_beam_size": 5,
+            "launch_on_bridge_start": True,
+        })
+
+        self.assertEqual(normalized["faster_whisper_model"], "base")
+        self.assertEqual(normalized["faster_whisper_threads"], 2)
+        self.assertEqual(normalized["faster_whisper_beam_size"], 5)
+        self.assertFalse(normalized["launch_on_bridge_start"])
+        self.assertFalse(manager.is_system_managed_provider("faster_whisper"))
+        self.assertFalse(manager.is_launchable_provider("faster_whisper"))
+
+        for provider in ("sogou", "wetype", "doubao_ime", "chatterfly", "custom"):
+            with self.subTest(provider=provider):
+                normalized["provider"] = provider
+                normalized = manager.normalize_voice_program_settings(normalized)
+                self.assertEqual(normalized["faster_whisper_model"], "base")
+                self.assertEqual(normalized["faster_whisper_threads"], 2)
+                self.assertEqual(normalized["faster_whisper_beam_size"], 5)
+
+    def test_invalid_engine_settings_fall_back_to_engine_defaults(self):
+        normalized = manager.normalize_voice_program_settings({
+            "provider": "faster_whisper",
+            "faster_whisper_model": "large-v3",
+            "faster_whisper_threads": 3,
+            "faster_whisper_beam_size": 4,
+        })
+
+        self.assertEqual(normalized["faster_whisper_model"], "small")
+        self.assertEqual(normalized["faster_whisper_threads"], 4)
+        self.assertEqual(normalized["faster_whisper_beam_size"], 1)
+
+    def test_local_adapter_needs_no_discovery_launch_settings_or_hotkey_preflight(self):
+        settings = {
+            "provider": "faster_whisper",
+            "custom_executable": "must-not-be-inspected.exe",
+            "launch_on_bridge_start": True,
+        }
+        fail_processes = lambda: self.fail("local recognition must not enumerate processes")
+        resolved = manager.resolve_voice_program(
+            settings,
+            platform="win32",
+            process_iter=fail_processes,
+        )
+        status = manager.inspect_voice_program(
+            settings,
+            platform="win32",
+            process_iter=fail_processes,
+        )
+        target = manager.resolve_voice_program_settings_target(
+            settings,
+            platform="win32",
+            process_iter=fail_processes,
+        )
+        launched = manager.launch_voice_program(
+            settings,
+            platform="win32",
+            process_iter=fail_processes,
+            start_file=lambda *_: self.fail("local recognition must not launch"),
+        )
+        startup = manager.launch_configured_at_bridge_start(
+            {"voice_program": settings},
+            launcher=lambda *_: self.fail("local recognition must not autostart"),
+        )
+
+        self.assertTrue(resolved.available)
+        self.assertIsNone(resolved.executable)
+        self.assertEqual(resolved.process_names, ())
+        self.assertEqual(resolved.source, "built_in")
+        self.assertTrue(status.available)
+        self.assertFalse(status.running)
+        self.assertEqual(status.code, "built_in_adapter")
+        self.assertIn("已内置", manager.status_text(status))
+        self.assertIn("语音运行时", manager.status_text(status))
+        self.assertEqual(target.kind, "unsupported")
+        self.assertFalse(target.available)
+        self.assertEqual(launched.code, "built_in_adapter")
+        self.assertEqual(startup.code, "not_requested")
+        self.assertEqual(manager.voice_configuration_issue(settings), "")
+
+    def test_local_adapter_is_not_a_diagnostic_voice_process(self):
+        candidates = (manager.ProcessInfo(90, "faster_whisper.exe"),)
+
+        def process_iter(*, names=None):
+            return tuple(
+                process for process in candidates
+                if names is None or process.name.casefold() in names
+            )
+
+        with mock.patch.object(manager, "_iter_windows_processes", side_effect=process_iter):
+            self.assertEqual(manager.diagnostic_voice_processes(), ())
+
 
 class SogouDiscoveryTests(unittest.TestCase):
     def setUp(self):

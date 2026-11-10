@@ -706,7 +706,7 @@ Item {
             tokens: programEditor.tokens
             Layout.fillWidth: true
             Layout.minimumWidth: 0
-            placeholderText: qsTr("填写完整的 .exe 路径")
+            placeholderText: qsTr("浏览程序或选择应用")
             Accessible.name: programEditor.accessibleLabel
             color: activeFocus ? tokens.textPrimary : "transparent"
             onTextChanged: actionEditor.validationRequested = false
@@ -725,6 +725,19 @@ Item {
             }
         }
         CompactButton {
+            objectName: programEditor.objectName + "Apps"
+            tokens: programEditor.tokens
+            compactMinimumWidth: programEditor.tokens.buttonWidth4Chars
+            text: qsTr("选择应用")
+            Accessible.name: programEditor.accessibleLabel + qsTr("选择应用")
+            onClicked: {
+                programStoreDialog.targetEditor = programEditor
+                storeAppSearch.text = ""
+                programStoreDialog.open()
+                SettingsController.refreshStoreApps()
+            }
+        }
+        CompactButton {
             objectName: programEditor.objectName + "Browse"
             tokens: programEditor.tokens
             compactMinimumWidth: programEditor.tokens.buttonWidth2Chars
@@ -733,6 +746,79 @@ Item {
             onClicked: {
                 programFileDialog.targetEditor = programEditor
                 programFileDialog.open()
+            }
+        }
+    }
+
+    SettingsDialog {
+        id: programStoreDialog
+        objectName: "mappingStoreAppDialog"
+        tokens: root.tokens
+        preferredWidth: 480
+        title: qsTr("选择已安装的应用")
+        property var targetEditor: null
+        readonly property var filteredApps: {
+            const query = storeAppSearch.text.trim().toLowerCase()
+            const rows = SettingsController.storeApps
+            return rows.filter(function(row) { return row.name.toLowerCase().indexOf(query) >= 0 })
+        }
+        onClosed: targetEditor = null
+        contentItem: ColumnLayout {
+            spacing: root.tokens.spacingSmall
+            RowLayout {
+                Layout.fillWidth: true
+                CompactTextField {
+                    id: storeAppSearch
+                    objectName: "storeAppSearch"
+                    tokens: root.tokens
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("搜索应用名称")
+                    Accessible.name: qsTr("搜索已安装的应用")
+                }
+                CompactButton {
+                    objectName: "refreshStoreAppsButton"
+                    tokens: root.tokens
+                    text: qsTr("刷新")
+                    enabled: !SettingsController.storeAppsBusy
+                    onClicked: SettingsController.refreshStoreApps()
+                }
+            }
+            UiLabel {
+                tokens: root.tokens
+                kind: noteKind
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: SettingsController.storeAppsBusy ? qsTr("正在读取应用…")
+                    : SettingsController.storeAppsError || (programStoreDialog.filteredApps.length === 0
+                        ? qsTr("没有找到匹配的应用") : qsTr("点击应用名称即可选择"))
+            }
+            ListView {
+                id: storeAppList
+                objectName: "storeAppList"
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.max(96, Math.min(240, programStoreDialog.parent.height - 180))
+                clip: true
+                model: programStoreDialog.filteredApps
+                ScrollBar.vertical: ScrollBar {}
+                delegate: ItemDelegate {
+                    required property var modelData
+                    objectName: "storeApp_" + modelData.target
+                    width: storeAppList.width
+                    height: 36
+                    contentItem: Label {
+                        text: modelData.name
+                        textFormat: Text.PlainText
+                        color: root.tokens.textPrimary
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
+                    onClicked: {
+                        if (programStoreDialog.targetEditor && actionEditor.visible)
+                            programStoreDialog.targetEditor.text = modelData.target
+                        programStoreDialog.accept()
+                    }
+                    Accessible.name: modelData.name
+                }
             }
         }
     }

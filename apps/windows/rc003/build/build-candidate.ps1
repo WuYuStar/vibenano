@@ -41,8 +41,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$RC003Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$RepoRoot = (Resolve-Path (Join-Path $RC003Root "..\..\..")).Path
+$RC003Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).ProviderPath
+$RepoRoot = (Resolve-Path (Join-Path $RC003Root "..\..\..")).ProviderPath
 . (Join-Path $PSScriptRoot "build-provenance.ps1")
 $BuildRoot = Join-Path $RC003Root "dist\RemoteMicRC003"
 $BuildProvenancePath = $null
@@ -224,7 +224,7 @@ try {
     Write-Host "-- compile first-party business modules with Cython --"
     & $venvPython (Join-Path "build" "prepare-cython-core.py")
     Assert-LastExitCode "prepare-cython-core.py"
-    $cythonSourceRoot = (Resolve-Path (Join-Path "build" "cython-stage\src")).Path
+    $cythonSourceRoot = (Resolve-Path (Join-Path "build" "cython-stage\src")).ProviderPath
     $env:PYTHONPATH = $cythonSourceRoot
     Write-Host "-- complete native-stage test suite (single pass) --"
     $testLogPath = Join-Path ([System.IO.Path]::GetTempPath()) (

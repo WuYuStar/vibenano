@@ -603,7 +603,16 @@ class AttachEvidence:
         changed = [p for p, signature in candidates.items() if self.before.get(p) != signature]
         details.update(changed_candidates=len(changed), asset_scope='candidates_not_proven_loaded_path')
         # Fresh extraction wins; existing candidates remain explicitly ambiguous.
+        # With no fresh file, retain one candidate from each known layout before
+        # considering more versions in either. Two installed helper versions
+        # must not crowd the current user's temporary agent out of the sample.
         selected = changed or list(candidates)
+        program_files = os.environ.get('ProgramFiles')
+        if not changed and program_files:
+            helper_root = Path(program_files) / 'Frida'
+            helpers = [path for path in selected if path.parent.parent == helper_root]
+            ordinary = [path for path in selected if path.parent.parent != helper_root]
+            selected = ordinary[:1] + helpers[:1] + ordinary[1:] + helpers[1:]
         details['omitted_candidates'] = max(0, len(selected)-2)
         for path in selected[:2]:
             ref = hashlib.sha256(str(path).encode('utf-8')).hexdigest()

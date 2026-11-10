@@ -107,11 +107,11 @@ def inspect_voice_program(settings):
         display_name=m.voice_program_manager.VOICE_PROGRAM_PROVIDER_NAMES.get(
             provider_id, "测试语音程序"
         ),
-        available=False,
+        available=provider_id in ("fun_asr_nano", "paraformer_streaming"),
         running=False,
         elevated=None,
         executable=None,
-        code="not_found",
+        code="built_in_adapter" if provider_id in ("fun_asr_nano", "paraformer_streaming") else "not_found",
     )
 
 
@@ -344,6 +344,108 @@ render(window, app)
 chatterfly["recording_refresh_enabled"] = bool(refresh_button.property("enabled"))
 voice_page.setProperty("voiceHotkeyRecording", False)
 
+previous_window_width = int(window.property("width"))
+previous_window_height = int(window.property("height"))
+window.setWidth(640)
+window.setHeight(480)
+controller.selectVoiceProgramMenuOption(4)
+wait_for_voice_hotkey_idle(controller, app)
+controller._voice_program_status_code = "built_in_adapter"
+controller.voiceProgramStatusCodeChanged.emit()
+render(window, app)
+local_names = (
+    "virtualAudioRow",
+    "outputEndpointRow",
+    "microphonePrivacyRow",
+    "voiceHotkeyRow",
+    "openVoiceProgramSettingsButton",
+    "voiceProgramElevatedCheckBox",
+    "voiceTestSection",
+    "nanoSettingsRow",
+    "nanoThreadsCombo",
+    "fasterWhisperModelNotice",
+    "fasterWhisperRuntimeText",
+)
+local_controls = {name: find(window, name) for name in local_names}
+assert all(control is not None for control in local_controls.values())
+faster_whisper = {
+    "provider": str(controller._voice_program_settings["provider"]),
+    "provider_index": int(controller.selectedVoiceProgramIndex),
+    "menu_index": int(controller.voiceProgramMenuIndex),
+    "program_count": int(controls["voiceProgramCombo"].property("count")),
+    "program_state": str(controls["voiceProgramSelectionRow"].property("stateText")),
+    "hotkey": str(controller.holdVoiceHotkeyText),
+    "hotkey_reads": sum(
+        provider == "fun_asr_nano" for provider, _allow in provider_read_requests
+    ),
+    "visibility": {
+        name: bool(control.property("visible"))
+        for name, control in local_controls.items()
+    },
+    "notice": str(local_controls["fasterWhisperModelNotice"].property("text")),
+    "first_focus": voice_page.property("firstFocusItem") == find(
+        window, "openMicrophonePrivacyButton"
+    ),
+    "last_focus": voice_page.property("lastFocusItem") == local_controls[
+        "nanoThreadsCombo"
+    ],
+}
+controller.fasterWhisperThreadsIndex = 3
+render(window, app)
+faster_whisper["setting_indices"] = [
+    int(local_controls[name].property("currentIndex"))
+    for name in (
+            "nanoThreadsCombo",
+    )
+]
+faster_whisper["geometry"] = {
+    name: geometry(local_controls[name])
+    for name in (
+        "nanoSettingsRow",
+            "nanoThreadsCombo",
+        "fasterWhisperModelNotice",
+    )
+}
+faster_whisper_runtime = {}
+for state in (
+    "not_tested",
+    "model_loading",
+    "active",
+    "receiving_audio",
+    "transcribing",
+    "finishing",
+    "success",
+    "audio_empty",
+    "unavailable",
+    "failed",
+    "busy",
+    "text_submit_failed",
+    "host_start_failed",
+):
+    controller._voice_runtime_provider = "fun_asr_nano"
+    controller._voice_runtime_state = state
+    controller.voiceRuntimeStatusChanged.emit()
+    render(window, app)
+    runtime_label = local_controls["fasterWhisperRuntimeText"]
+    faster_whisper_runtime[state] = {
+        "visible": bool(runtime_label.property("visible")),
+        "text": str(runtime_label.property("text")),
+    }
+    assert geometry(runtime_label)["right"] <= 641
+controller._voice_runtime_provider = "wetype"
+controller._voice_runtime_state = "success"
+controller.voiceRuntimeStatusChanged.emit()
+render(window, app)
+faster_whisper_stale_visible = bool(
+    local_controls["fasterWhisperRuntimeText"].property("visible")
+)
+controller._voice_runtime_provider = ""
+controller._voice_runtime_state = "not_tested"
+controller.voiceRuntimeStatusChanged.emit()
+window.setWidth(previous_window_width)
+window.setHeight(previous_window_height)
+render(window, app)
+
 controller._replace_voice_program_settings(dict(controller._voice_program_settings, provider="custom"))
 wait_for_voice_hotkey_idle(controller, app)
 render(window, app)
@@ -513,6 +615,9 @@ result = {
     "system_managed": system_managed,
     "doubao": doubao,
     "chatterfly": chatterfly,
+    "fun_asr_nano": faster_whisper,
+    "faster_whisper_runtime": faster_whisper_runtime,
+    "faster_whisper_stale_visible": faster_whisper_stale_visible,
     "custom_program": custom_program,
     "unmanaged_elevated": unmanaged_elevated,
     "retired_controls_absent": all(
@@ -598,6 +703,63 @@ controller.shutdownBackgroundTasks()''',
             "refresh_visible": True, "refresh_enabled": True,
             "state": "自动识别", "recording_refresh_enabled": False,
         })
+        local = data["fun_asr_nano"]
+        self.assertEqual(local["provider"], "fun_asr_nano")
+        self.assertEqual(local["provider_index"], 8)
+        self.assertEqual(local["menu_index"], 4)
+        self.assertEqual(local["program_count"], 5)
+        self.assertEqual(local["program_state"], "本机识别")
+        self.assertEqual(local["hotkey"], "")
+        self.assertEqual(local["hotkey_reads"], 0)
+        self.assertEqual(local["visibility"], {
+            "virtualAudioRow": False,
+            "outputEndpointRow": False,
+            "microphonePrivacyRow": True,
+            "voiceHotkeyRow": False,
+            "openVoiceProgramSettingsButton": False,
+            "voiceProgramElevatedCheckBox": False,
+            "voiceTestSection": False,
+            "nanoSettingsRow": True,
+            "nanoThreadsCombo": True,
+            "fasterWhisperModelNotice": True,
+            "fasterWhisperRuntimeText": False,
+        })
+        self.assertEqual(
+            local["notice"],
+            "在本机离线识别中英文：按住说话，松开后输出文字。首次加载需等待，退出会释放模型内存。",
+        )
+        self.assertTrue(local["first_focus"])
+        self.assertTrue(local["last_focus"])
+        self.assertEqual(local["setting_indices"], [3])
+        for bounds in local["geometry"].values():
+            self.assertGreater(bounds["width"], 0)
+            self.assertGreater(bounds["height"], 0)
+            self.assertGreaterEqual(bounds["x"], 0)
+            self.assertLessEqual(bounds["right"], 641)
+            self.assertLessEqual(bounds["bottom"], 481)
+        expected_runtime = {
+            "not_tested": "待识别",
+            "model_loading": "正在加载/下载模型",
+            "active": "录音中",
+            "receiving_audio": "录音中",
+            "transcribing": "正在识别",
+            "finishing": "正在识别",
+            "success": "识别完成（文字粘贴已提交）",
+            "audio_empty": "未识别到文字/未收到声音",
+            "unavailable": "识别组件或模型不可用",
+            "failed": "识别失败",
+            "busy": "上一段仍在识别，请稍后",
+            "text_submit_failed": "文字输入失败（焦点变化或目标不可用）",
+            "host_start_failed": "无法开始本地录音",
+        }
+        for state, text in expected_runtime.items():
+            with self.subTest(local_runtime_state=state):
+                self.assertTrue(data["faster_whisper_runtime"][state]["visible"])
+                self.assertEqual(
+                    data["faster_whisper_runtime"][state]["text"],
+                    "识别状态：" + text,
+                )
+        self.assertFalse(data["faster_whisper_stale_visible"])
         self.assertTrue(data["retired_controls_absent"])
         self.assertTrue(all(item["visible"] for item in data["managed"].values()))
         self.assertTrue(all(item["enabled"] for item in data["managed"].values()))

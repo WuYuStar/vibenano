@@ -26,17 +26,20 @@ VOICE_PROGRAM_SOGOU = "sogou"
 VOICE_PROGRAM_WETYPE = "wetype"
 VOICE_PROGRAM_DOUBAO_IME = "doubao_ime"
 VOICE_PROGRAM_CHATTERFLY = "chatterfly"
+VOICE_PROGRAM_FASTER_WHISPER = "faster_whisper"
+VOICE_PROGRAM_PARAFORMER = "paraformer_streaming"
+VOICE_PROGRAM_FUN_ASR_NANO = "fun_asr_nano"
+VOICE_PROGRAM_QWEN3_ASR = "qwen3_asr"
+LEGACY_LOCAL_VOICE_PROVIDERS = frozenset((VOICE_PROGRAM_FASTER_WHISPER, VOICE_PROGRAM_PARAFORMER, VOICE_PROGRAM_QWEN3_ASR))
+LOCAL_VOICE_PROVIDERS = frozenset((VOICE_PROGRAM_FUN_ASR_NANO,))
 LEGACY_VOICE_PROGRAM_WINDOWS_DICTATION = "windows_dictation"
 VOICE_PROGRAM_CUSTOM = "custom"
 
 VOICE_PROGRAM_SELECTABLE_PROVIDER_ORDER = (
-    VOICE_PROGRAM_NONE,
-    VOICE_PROGRAM_SOGOU,
-    VOICE_PROGRAM_WETYPE,
-    VOICE_PROGRAM_DOUBAO_IME,
-    VOICE_PROGRAM_CHATTERFLY,
+    VOICE_PROGRAM_NONE, VOICE_PROGRAM_SOGOU, VOICE_PROGRAM_WETYPE,
+    VOICE_PROGRAM_DOUBAO_IME, VOICE_PROGRAM_CHATTERFLY, VOICE_PROGRAM_FUN_ASR_NANO,
 )
-# Keep the legacy custom index (4) readable; new menu choices use their own order.
+# Keep every legacy index readable; new providers are appended only.
 VOICE_PROGRAM_PROVIDER_ORDER = (
     VOICE_PROGRAM_NONE,
     VOICE_PROGRAM_SOGOU,
@@ -44,6 +47,10 @@ VOICE_PROGRAM_PROVIDER_ORDER = (
     VOICE_PROGRAM_DOUBAO_IME,
     VOICE_PROGRAM_CUSTOM,
     VOICE_PROGRAM_CHATTERFLY,
+    VOICE_PROGRAM_FASTER_WHISPER,
+    VOICE_PROGRAM_PARAFORMER,
+    VOICE_PROGRAM_FUN_ASR_NANO,
+    VOICE_PROGRAM_QWEN3_ASR,
 )
 
 VOICE_PROGRAM_PROVIDER_NAMES = {
@@ -53,6 +60,7 @@ VOICE_PROGRAM_PROVIDER_NAMES = {
     VOICE_PROGRAM_DOUBAO_IME: "豆包输入法",
     VOICE_PROGRAM_CHATTERFLY: "Chatterfly",
     VOICE_PROGRAM_CUSTOM: "自定义程序",
+    VOICE_PROGRAM_FUN_ASR_NANO: "中英混合识别 (Fun-ASR-Nano)",
 }
 
 _SOGOU_PROCESS_NAME = "sogou_voice_assistant.exe"
@@ -71,7 +79,9 @@ _CHATTERFLY_PROCESS_NAME = "ChatterflyCloud.exe"
 _CHATTERFLY_SETTINGS_EXE = "FySetting.exe"
 _CHATTERFLY_LAUNCHER_EXE = Path("ChatterflyExe") / "ChatterflyExe.exe"
 _SYSTEM_MANAGED_PROVIDERS = frozenset({VOICE_PROGRAM_WETYPE, VOICE_PROGRAM_CHATTERFLY})
-_BUILTIN_ADAPTER_PROVIDERS = frozenset({VOICE_PROGRAM_DOUBAO_IME})
+_BUILTIN_ADAPTER_PROVIDERS = frozenset(
+    {VOICE_PROGRAM_DOUBAO_IME, *LOCAL_VOICE_PROVIDERS}
+)
 _LAUNCH_ELEVATED_DEFAULTS = {
     VOICE_PROGRAM_SOGOU: True,
     VOICE_PROGRAM_CUSTOM: False,
@@ -130,7 +140,7 @@ class ResolvedVoiceProgram:
 
     @property
     def available(self) -> bool:
-        return self.executable is not None
+        return self.executable is not None or self.source == "built_in"
 
 
 @dataclass(frozen=True)
@@ -166,11 +176,30 @@ class VoiceProgramSettingsTarget:
         return bool(self.target)
 
 
+def _normalize_faster_whisper_settings(data: Mapping[str, object]) -> dict[str, object]:
+    """Keep engine-owned validation in one place without loading the engine."""
+
+    from . import local_speech_core
+
+    normalized = local_speech_core.normalize_settings(data)
+    return {
+        key: normalized[key]
+        for key in (
+            "faster_whisper_model",
+            "faster_whisper_threads",
+            "faster_whisper_beam_size",
+        )
+    }
+
+
 def normalize_voice_program_settings(raw: object) -> dict[str, object]:
     """Return the stable persisted shape for optional provider management."""
 
     data = raw if isinstance(raw, Mapping) else {}
+    faster_whisper_settings = _normalize_faster_whisper_settings(data)
     provider_id = str(data.get("provider", VOICE_PROGRAM_NONE)).strip().lower()
+    if provider_id in LEGACY_LOCAL_VOICE_PROVIDERS:
+        provider_id = VOICE_PROGRAM_FUN_ASR_NANO
     if provider_id not in VOICE_PROGRAM_PROVIDER_ORDER:
         provider_id = VOICE_PROGRAM_NONE
     executable = str(data.get("custom_executable", "")).strip()
@@ -227,6 +256,7 @@ def normalize_voice_program_settings(raw: object) -> dict[str, object]:
         "launch_on_bridge_start_by_provider": start_preferences,
         "launch_elevated": current_elevated,
         "launch_elevated_by_provider": elevation_preferences,
+        **faster_whisper_settings,
     }
 
 
@@ -251,6 +281,8 @@ def provider_id_for_index(index: int) -> str:
 
 def provider_index(provider_id: object) -> int:
     normalized = str(provider_id).strip().lower()
+    if normalized in LEGACY_LOCAL_VOICE_PROVIDERS:
+        normalized = VOICE_PROGRAM_FUN_ASR_NANO
     try:
         return VOICE_PROGRAM_PROVIDER_ORDER.index(normalized)
     except ValueError:
@@ -272,6 +304,12 @@ def status_text(status: VoiceProgramStatus) -> str:
             return "已找到豆包输入法；当前未检测到输入法后台进程。"
         if status.code == "running":
             return "豆包输入法已安装并正在运行。"
+    if status.provider_id in LOCAL_VOICE_PROVIDERS:
+        if status.code == "built_in_adapter":
+            return (
+                f"{status.display_name} 已内置，首次使用需准备模型；"
+                "模型加载与识别状态由语音运行时报告。"
+            )
     if status.provider_id == VOICE_PROGRAM_CHATTERFLY:
         if status.code == "not_found":
             return "未找到 Chatterfly；正常安装后会自动识别。"
@@ -295,6 +333,11 @@ def status_text(status: VoiceProgramStatus) -> str:
 
 
 def launch_result_text(result: VoiceProgramLaunchResult) -> str:
+    if (
+        result.provider_id in LOCAL_VOICE_PROVIDERS
+        and result.code == "built_in_adapter"
+    ):
+        return "本地语音识别由无线麦内置提供，不需要单独启动。"
     if result.provider_id == VOICE_PROGRAM_SOGOU:
         sogou_messages = {
             "not_found": "未找到搜狗语音程序，请先安装或手动启动。",
@@ -346,10 +389,13 @@ def resolve_voice_program(
     normalized = normalize_voice_program_settings(settings)
     provider_id = str(normalized["provider"])
     display_name = VOICE_PROGRAM_PROVIDER_NAMES[provider_id]
-    configured_path = _validated_configured_path(normalized["custom_executable"])
 
     if provider_id == VOICE_PROGRAM_NONE:
         return ResolvedVoiceProgram(provider_id, display_name, None, (), "disabled")
+    if provider_id in LOCAL_VOICE_PROVIDERS:
+        return ResolvedVoiceProgram(provider_id, display_name, None, (), "built_in")
+
+    configured_path = _validated_configured_path(normalized["custom_executable"])
     if provider_id == VOICE_PROGRAM_CUSTOM:
         match_executable = configured_path
         if configured_path is not None and configured_path.suffix.casefold() == ".lnk":
@@ -605,6 +651,16 @@ def inspect_voice_program(
             None,
             None,
             "disabled",
+        )
+    if resolved.provider_id in LOCAL_VOICE_PROVIDERS:
+        return VoiceProgramStatus(
+            resolved.provider_id,
+            resolved.display_name,
+            True,
+            False,
+            None,
+            None,
+            "built_in_adapter",
         )
     if not resolved.available:
         return VoiceProgramStatus(

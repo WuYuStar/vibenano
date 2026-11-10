@@ -53,6 +53,43 @@ class EntitySettingsTests(unittest.TestCase):
         self.assertEqual(new["voice_program"]["launch_on_bridge_start_by_provider"],
                          {"sogou": True, "custom": False})
 
+    def test_faster_whisper_choices_round_trip_per_remote(self):
+        first = config.load_config(self.settings)
+        first["voice_program"] = {
+            "provider": "fun_asr_nano",
+            "faster_whisper_model": "base",
+            "faster_whisper_threads": 2,
+            "faster_whisper_beam_size": 5,
+        }
+        config.save_config(self.settings, first)
+
+        second, _ = self.switch(B)
+        self.assertEqual(second["voice_program"]["provider"], "none")
+        self.assertEqual(second["voice_program"]["faster_whisper_model"], "small")
+        self.assertEqual(second["voice_program"]["faster_whisper_threads"], 4)
+        self.assertEqual(second["voice_program"]["faster_whisper_beam_size"], 1)
+        second["voice_program"] = {
+            "provider": "fun_asr_nano",
+            "faster_whisper_model": "tiny",
+            "faster_whisper_threads": 8,
+            "faster_whisper_beam_size": 2,
+        }
+        config.save_config(self.settings, second)
+
+        first, _ = self.switch(A)
+        self.assertEqual(first["voice_program"]["provider"], "fun_asr_nano")
+        self.assertEqual(first["voice_program"]["faster_whisper_model"], "base")
+        self.assertEqual(first["voice_program"]["faster_whisper_threads"], 2)
+        self.assertEqual(first["voice_program"]["faster_whisper_beam_size"], 5)
+        self.assertEqual(first["voice_hotkey"], "")
+
+        second, _ = self.switch(B)
+        self.assertEqual(second["voice_program"]["provider"], "fun_asr_nano")
+        self.assertEqual(second["voice_program"]["faster_whisper_model"], "tiny")
+        self.assertEqual(second["voice_program"]["faster_whisper_threads"], 8)
+        self.assertEqual(second["voice_program"]["faster_whisper_beam_size"], 2)
+        self.assertEqual(second["voice_hotkey"], "")
+
     def test_round_trip_restores_each_entity_and_hold_is_default(self):
         for second in (selection.RC003_PROFILE, selection.CHROMECAST_PROFILE):
             with self.subTest(second=second):

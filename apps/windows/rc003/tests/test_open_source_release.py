@@ -170,6 +170,67 @@ class ThirdPartyReleaseGateTests(unittest.TestCase):
         for relative_path in required:
             self.assertTrue((license_root / relative_path).is_file(), relative_path)
 
+    def test_local_speech_packages_have_tagged_notices_and_required_licenses(self):
+        notice_text = (REPO_ROOT / "THIRD_PARTY_NOTICES.md").read_text(
+            encoding="utf-8"
+        )
+        script_path = BUILD_ROOT / "check-release-readiness.py"
+        namespace: dict[str, object] = {
+            "__name__": "release_gate_contract",
+            "__file__": str(script_path),
+        }
+        exec(compile(script_path.read_text(encoding="utf-8"), str(script_path), "exec"), namespace)
+        required = set(namespace["_REQUIRED_LICENSE_FILES"])
+        packages = {
+            "faster-whisper==1.2.1": (
+                "https://github.com/SYSTRAN/faster-whisper/tree/v1.2.1",
+                "faster-whisper-1.2.1/LICENSE.txt",
+            ),
+            "ctranslate2==4.8.5": (
+                "https://github.com/OpenNMT/CTranslate2/tree/v4.8.5",
+                "ctranslate2-4.8.5/LICENSE.txt",
+            ),
+            "tokenizers==0.23.3": (
+                "https://github.com/huggingface/tokenizers/tree/v0.23.3",
+                "tokenizers-0.23.3/LICENSE.txt",
+            ),
+            "onnxruntime==1.31.1": (
+                "https://github.com/microsoft/onnxruntime/tree/v1.31.1",
+                "onnxruntime-1.31.1/LICENSE.txt",
+            ),
+            "av==19.0.2": (
+                "https://github.com/PyAV-Org/PyAV/tree/v19.0.2",
+                "av-19.0.2/LICENSE.txt",
+            ),
+            "huggingface-hub==0.36.2": (
+                "https://github.com/huggingface/huggingface_hub/tree/v0.36.2",
+                "huggingface-hub-0.36.2/LICENSE.txt",
+            ),
+        }
+        for pin, (source_url, license_path) in packages.items():
+            with self.subTest(package=pin):
+                self.assertIn(pin, notice_text)
+                self.assertIn(source_url, notice_text)
+                self.assertIn(license_path, required)
+                license_file = REPO_ROOT / "THIRD_PARTY_LICENSES" / license_path
+                self.assertTrue(license_file.is_file())
+                self.assertGreater(license_file.stat().st_size, 500)
+        self.assertIn("final frozen Windows artifact", notice_text)
+        self.assertIn("source of truth", notice_text)
+
+    def test_model_cards_are_separate_from_the_frozen_package_payload(self):
+        notice_text = (REPO_ROOT / "THIRD_PARTY_NOTICES.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("No Whisper model weights", notice_text)
+        self.assertIn("models/faster-whisper", notice_text)
+        self.assertIn("declare the MIT license", notice_text)
+        for model in ("tiny", "base", "small"):
+            self.assertIn(
+                f"https://huggingface.co/Systran/faster-whisper-{model}",
+                notice_text,
+            )
+
     def test_pyinstaller_spec_excludes_the_unused_asio_portaudio_binary(self):
         text = (BUILD_ROOT / "RemoteMicRC003.spec").read_text(encoding="utf-8")
         self.assertIn("_is_unneeded_sounddevice_asio", text)

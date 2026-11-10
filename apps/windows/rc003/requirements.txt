@@ -9,6 +9,11 @@
 sounddevice==0.5.5
 numpy==2.4.3
 
+# Fun-ASR-Nano runs in the bundled CPU-native worker, without a Python ML stack.
+# Only lightweight HTTPS and inter-process download locking are needed here.
+requests==2.34.2
+filelock==4.2.9
+
 # Qt Quick/QML settings window (XRBM-030), replacing the earlier Tk view.
 # PySide6-Essentials is the official Qt-for-Python distribution split that
 # excludes the (separately packaged, heavier) PySide6-Addons modules this

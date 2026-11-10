@@ -335,6 +335,18 @@ function Get-RC003BuildInputFiles {
         $files.Add($file)
     }
 
+    # Native worker and recipe are also inputs to the frozen application.
+    $nanoRecipe = Join-Path $RC003Root "build\nano"
+    if (Test-Path -LiteralPath $nanoRecipe -PathType Container) {
+        foreach ($file in Get-ChildItem -LiteralPath $nanoRecipe -File -Recurse) {
+            $files.Add($file)
+        }
+    }
+    $nanoWorker = Join-Path $RC003Root ".build\nano-runtime\rc003-nano.exe"
+    if (Test-Path -LiteralPath $nanoWorker -PathType Leaf) {
+        $files.Add((Get-Item -LiteralPath $nanoWorker))
+    }
+
     $requiredFiles = @(
         (Join-Path $RC003Root "build\build-candidate.ps1"),
         (Join-Path $RC003Root "build\package-local-test.ps1"),

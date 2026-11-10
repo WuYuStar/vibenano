@@ -82,11 +82,20 @@ def request_program_launch(
 
 
 def _shell_open_program(path: str) -> None:
-    """Open a literal EXE with normal Windows security and failure feedback."""
+    """Open an EXE, or a validated packaged ID via the fixed system Explorer."""
     if sys.platform != "win32":
         raise OSError("Windows program launch is unavailable")
-    if not Path(path).is_file():
-        raise FileNotFoundError("Configured program file is unavailable")
+    path = key_mapping.normalize_program_path(path)
+    identity = key_mapping.store_app_id(path)
+    if identity:
+        from .store_apps_windows import windows_directory
+        directory = windows_directory()
+        executable = str(directory / "explorer.exe")
+    else:
+        if not Path(path).is_file():
+            raise FileNotFoundError("Configured program file is unavailable")
+        executable = path
+        directory = Path(path).parent
 
     class ShellExecuteInfo(ctypes.Structure):
         _fields_ = [
@@ -119,8 +128,10 @@ def _shell_open_program(path: str) -> None:
         # handled by Windows; SEE_MASK_FLAG_NO_UI does not suppress them.
         info.fMask = 0x00000100 | 0x00000400  # NOASYNC | FLAG_NO_UI
         info.lpVerb = "open"
-        info.lpFile = path
-        info.lpDirectory = str(Path(path).parent)
+        info.lpFile = executable
+        if identity:
+            info.lpParameters = key_mapping.STORE_APP_PREFIX + identity
+        info.lpDirectory = str(directory)
         info.nShow = 1  # SW_SHOWNORMAL; do not hide a requested application.
         if not shell.ShellExecuteExW(ctypes.byref(info)):
             raise ctypes.WinError(ctypes.get_last_error())
@@ -131,13 +142,13 @@ def _shell_open_program(path: str) -> None:
 def _show_program_launch_error(path: str, error: Exception) -> None:
     code = getattr(error, "winerror", None)
     if isinstance(error, FileNotFoundError) or code in (2, 3):
-        message = "找不到程序，请在按键映射中重新填写或浏览选择 .exe 文件。"
+        message = "找不到程序或应用，请在按键映射中重新浏览程序或选择应用。"
     elif code == 5:
         message = "没有权限打开程序，请检查该文件的访问权限。"
     elif code in (193, 216):
         message = "此文件不是可运行的 Windows 程序，或与当前系统不兼容，请重新选择。"
     else:
-        message = "程序启动失败，请检查路径，并尝试在文件资源管理器中双击该文件。"
+        message = "程序或应用启动失败，请检查是否仍已安装，并重新选择。"
     user = ctypes.WinDLL("user32", use_last_error=True)
     user.MessageBoxW.argtypes = [wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.UINT]
     user.MessageBoxW.restype = ctypes.c_int

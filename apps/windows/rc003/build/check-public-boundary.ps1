@@ -69,10 +69,11 @@
 #>
 
 param(
-    [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot ".."))
+    [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).ProviderPath
 )
 
 $ErrorActionPreference = "Stop"
+$ProjectRoot = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $ProjectRoot).ProviderPath)
 $violations = New-Object System.Collections.Generic.List[string]
 
 $forbiddenBinaryExtensions = @(".exe", ".dll", ".pyd", ".zip", ".xz")
@@ -108,6 +109,8 @@ $elevationMarkers = @("runas", "ShellExecute", "IsUserAnAdmin", "RequireAdminist
 $reviewedElevationMarkers = @{
     # User-selected EXE launch: fixed ordinary open verb, no elevation request.
     "src/ovb_rc003/action_executor.py" = @("ShellExecute")
+    # Test only: verifies the ordinary open verb and fixed packaged target.
+    "tests/test_store_apps.py" = @("ShellExecute")
     "src/ovb_rc003/chromecast_pipe_windows.py" = @("runas", "ShellExecute")
     # Source-only one-shot HID worker; fixed launcher and authenticated pipe.
     "src/ovb_rc003/hid_source_injector.py" = @("runas", "ShellExecute")

@@ -810,7 +810,14 @@ def _handoff_previous_application(
 
 
 def main() -> None:
+    import multiprocessing
+    multiprocessing.freeze_support()
     args = dev_session.consume_marker(sys.argv[1:])
+    if "--local-model-check" in args:
+        from . import package_smoke
+        if len(args) != 3 or args[0] != package_smoke.FLAG:
+            raise SystemExit(2)
+        raise SystemExit(package_smoke.run(args[1], args[2]))
     if "--probe-rc003-candidate" in args:
         import os
         from . import ble_candidate_probe_process

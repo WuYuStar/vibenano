@@ -94,3 +94,90 @@ class VoiceResultTests(unittest.TestCase):
         session.on_cleanup(7, True)
         session.record_audio_result(303)
         services.set_result.assert_called_with(status.VOICE_RUNTIME_SUCCESS, provider="doubao_ime")
+
+
+class LocalBackendShortcutTests(unittest.TestCase):
+    def make_session(self):
+        services = mock.Mock()
+        services.configured_backend.return_value = shortcut._VOICE_HOTKEY_BACKEND_LOCAL
+        trace = mock.Mock()
+        trace.current_context.return_value = {}
+        session = shortcut.VoiceShortcutSession(
+            hotkey_text="ctrl+win",
+            logger=mock.Mock(),
+            trace=trace,
+            services=services,
+        )
+        session.wetype_control = mock.Mock()
+        session.doubao_control = mock.Mock()
+        session.chatterfly_control = mock.Mock()
+        session.doubao_physicalizer = mock.Mock()
+        return session, services
+
+    def test_local_key_down_and_up_never_emit_host_input_or_pending_tokens(self):
+        session, services = self.make_session()
+        with mock.patch.object(
+            session,
+            "send_action",
+            side_effect=AssertionError("local mode must not send a host hotkey"),
+        ) as send_action, mock.patch.object(
+            shortcut.win32_input,
+            "send_voice_key_combo_down",
+        ) as marked_down, mock.patch.object(
+            shortcut.win32_input,
+            "send_voice_key_combo_up",
+        ) as marked_up, mock.patch.object(
+            shortcut.win32_input,
+            "send_wetype_voice_key_combo_down",
+        ) as wetype_down, mock.patch.object(
+            shortcut.win32_input,
+            "send_wetype_voice_key_combo_up",
+        ) as wetype_up, mock.patch.object(
+            shortcut.win32_keys,
+            "resolve_vk_codes",
+            side_effect=AssertionError("local mode must not resolve hotkey tokens"),
+        ) as resolve:
+            self.assertTrue(
+                session.apply(shortcut.voice_controller.VoiceHostAction.KEY_DOWN)
+            )
+            self.assertIsNone(session.pending_tokens)
+            self.assertIsNone(session.pending_backend)
+            self.assertEqual(
+                session.active_backend,
+                shortcut._VOICE_HOTKEY_BACKEND_LOCAL,
+            )
+            services.resume_tracking.assert_not_called()
+
+            self.assertTrue(
+                session.apply(shortcut.voice_controller.VoiceHostAction.KEY_UP)
+            )
+
+        self.assertIsNone(session.pending_tokens)
+        self.assertIsNone(session.pending_backend)
+        self.assertIsNone(session.active_backend)
+        self.assertIsNone(session.retry_timer)
+        services.resume_tracking.assert_called_once_with()
+        send_action.assert_not_called()
+        marked_down.assert_not_called()
+        marked_up.assert_not_called()
+        wetype_down.assert_not_called()
+        wetype_up.assert_not_called()
+        resolve.assert_not_called()
+        session.wetype_control.start.assert_not_called()
+        session.wetype_control.stop.assert_not_called()
+        session.doubao_control.start.assert_not_called()
+        session.doubao_control.stop.assert_not_called()
+        session.chatterfly_control.start.assert_not_called()
+        session.chatterfly_control.stop.assert_not_called()
+        session.doubao_physicalizer.expect_markers.assert_not_called()
+
+    def test_local_backend_maps_to_local_speech_core(self):
+        session, _services = self.make_session()
+        self.assertEqual(
+            session.provider_for_backend(shortcut._VOICE_HOTKEY_BACKEND_LOCAL),
+            shortcut.voice_program_manager.VOICE_PROGRAM_FASTER_WHISPER,
+        )
+        self.assertEqual(
+            session.provider_for_backend(shortcut._VOICE_HOTKEY_BACKEND_LOCAL),
+            "faster_whisper",
+        )

@@ -12,7 +12,7 @@ import sys
 import tempfile
 
 from ovb_rc003.chromecast_voice import Recording, Effect, LIMITS, DEFAULT_LIMIT, GET_CAPABILITIES
-from ovb_rc003.chromecast_voice_host import VoiceHost
+from ovb_rc003.chromecast_voice_host import VoiceHost, VoiceHostServices
 from ovb_rc003.audio_playback_worker import PlaybackWriteWorker
 from ovb_rc003 import voice_controller, chromecast_channel as channel, win32_input, raw_input_windows
 
@@ -214,9 +214,11 @@ class HostTests(unittest.TestCase):
         self.owner = mock.Mock()
         o = self.owner
         from ovb_rc003.voice_audio_session import VoiceAudioSession
+        from ovb_rc003.atvv_session import PcmStats
         # Exercise the real ownership operations; only the device I/O is mocked.
         o._voice_audio.stop_writer.side_effect = lambda: VoiceAudioSession.stop_writer(o._voice_audio)
         o._voice_audio.close_sink.side_effect = lambda: VoiceAudioSession.close_sink(o._voice_audio)
+        o._voice_audio.stats = PcmStats()
         o._config = {"gain_db": 0, "voice_program": {"provider": "wetype"}}
         o._voice_shortcut.lock = threading.Lock()
         o._voice_shortcut.runtime_lock = threading.Lock()
@@ -232,13 +234,238 @@ class HostTests(unittest.TestCase):
         o._voice_shortcut.control_flag.return_value = False
         o._voice_audio.flush.return_value = SimpleNamespace(completed=True, error=None)
         o._voice_audio.stats.frames = 2
-        from ovb_rc003.app import RC003App
-        self.host = RC003App._create_chromecast_voice_host(o)
+        self.local_runtime = mock.Mock()
+        self.local_runtime.submit.return_value = True
+        self.local_claim = mock.Mock()
+        self.local_cancel = mock.Mock()
+        self.capture_text_target = mock.Mock(return_value=("window", 42, "snapshot"))
+        self.host = VoiceHost(VoiceHostServices(
+            audio=o._voice_audio,
+            shortcut=o._voice_shortcut,
+            settings=lambda: o._config,
+            config_root=o._config_root,
+            logger=o._logger,
+            configured_backend=o._configured_voice_hotkey_backend,
+            voice_mapping_enabled=lambda: o._voice_mode_for_primary_button(
+                "mic", o._primary_button_action("mic")) is not None,
+            ensure_key_tracking=lambda *args: o._ensure_voice_key_physicalizer_for_hotkey(*args),
+            reload_settings=o._reload_settings_if_changed,
+            apply_pending_settings=o._apply_pending_voice_settings_if_idle_locked,
+            begin_diagnostic=lambda *args, **kw: o._ensure_voice_diagnostic_attempt(*args, **kw),
+            finish_diagnostic=lambda *args, **kw: o._finish_voice_diagnostic_attempt(*args, **kw),
+            set_active=o._set_runtime_voice_active,
+            set_result=lambda *args, **kw: o._set_runtime_voice_result(*args, **kw),
+            wait_sogou=o._wait_for_sogou_voice_process,
+            disable_forwarding=lambda: setattr(o, "_voice_pcm_forwarding_enabled", False),
+            local_runtime=lambda: self.local_runtime,
+            local_claim=self.local_claim,
+            local_cancel=self.local_cancel,
+            capture_text_target=self.capture_text_target,
+        ))
         for target, result in (("ovb_rc003.chromecast_host_activity.read_wetype_capture", ()),):
             patcher = mock.patch(target, return_value=result)
             patcher.start()
             self.addCleanup(patcher.stop)
         self.host.client = mock.Mock()
+
+    def start_local(self, attempt=1, trigger="hold"):
+        self.owner._config.update(
+            remote_recording_mode=trigger,
+            voice_program={
+                "provider": "fun_asr_nano",
+                "faster_whisper_model": "base",
+                "faster_whisper_threads": 2,
+                "faster_whisper_beam_size": 5,
+            },
+        )
+        self.host._start_host(attempt)
+        return self.host._local_owner
+
+    def test_qwen_starts_as_local_without_external_shortcut_or_stream_feed(self):
+        self.owner._config["voice_program"] = {"provider": "qwen3_asr"}
+        self.host._start_host(1)
+        self.assertIsNotNone(self.host._local_owner)
+        self.assertEqual(self.host._local_settings["provider"], "fun_asr_nano")
+        self.local_runtime.begin.assert_not_called()
+
+    def test_nano_starts_as_local_without_external_shortcut_or_stream_feed(self):
+        self.owner._config["voice_program"] = {"provider": "fun_asr_nano"}
+        self.host._start_host(1)
+        self.assertIsNotNone(self.host._local_owner)
+        self.assertEqual(self.host._local_settings["provider"], "fun_asr_nano")
+        self.local_runtime.begin.assert_not_called()
+
+    def test_retired_paraformer_migrates_to_nano_and_submits_once(self):
+        self.owner._config["voice_program"] = {"provider": "paraformer_streaming"}
+        self.host._start_host(1)
+        owner = self.host._local_owner
+        self.assertEqual(self.host._local_settings["provider"], "fun_asr_nano")
+        self.local_runtime.begin.assert_not_called()
+        self.host._capture_local([1, 2, 3])
+        self.local_runtime.feed.assert_not_called()
+        self.host._stop_local_host("released")
+        self.local_runtime.submit.assert_called_once()
+        self.assertIs(self.local_runtime.submit.call_args.args[0], owner)
+        self.assertEqual(self.local_runtime.submit.call_args.args[3], ("window", 42, "snapshot"))
+
+    def test_local_start_uses_no_output_or_hotkey_and_ready_once(self):
+        owner = self.start_local()
+        self.assertIsNotNone(owner)
+        self.assertTrue(self.host.engaged)
+        self.assertTrue(self.host.confirmed)
+        self.assertTrue(self.host.ready_sent)
+        self.assertEqual(self.host.state, "starting")
+        self.owner._voice_audio.open.assert_not_called()
+        self.owner._voice_shortcut.apply.assert_not_called()
+        self.owner._voice_shortcut.release_pending.assert_not_called()
+        self.owner._ensure_voice_key_physicalizer_for_hotkey.assert_not_called()
+        self.owner._ensure_voice_diagnostic_attempt.assert_not_called()
+        self.local_claim.assert_called_once_with(owner)
+        self.capture_text_target.assert_called_once_with()
+        self.assertEqual(self.host._local_settings, {
+            "provider": "fun_asr_nano",
+            "faster_whisper_model": "base",
+            "faster_whisper_threads": 2,
+            "faster_whisper_beam_size": 5,
+        })
+        self.local_runtime.submit.assert_not_called()
+        self.host.client.voice_host.assert_called_once_with(1, "ready")
+        self.host._poll_host()
+        self.host._poll_host()
+        self.host.client.voice_host.assert_called_once_with(1, "ready")
+        self.owner._set_runtime_voice_active.assert_called_once_with(True)
+        self.owner._set_runtime_voice_result.assert_called_once_with("active")
+
+    def test_local_pcm_is_captured_without_output_or_playback(self):
+        from ovb_rc003.local_speech_core import pcm_bytes_from_samples
+        owner = self.start_local()
+        self.owner._config["voice_program"].update(
+            faster_whisper_model="tiny", faster_whisper_threads=8,
+            faster_whisper_beam_size=1)
+        samples = [0, 1, -2, 300, -400, 32767, -32768]
+        self.host.decoder = SimpleNamespace(
+            mic_open=True,
+            handle_audio=mock.Mock(return_value=samples),
+            handle_control=mock.Mock(),
+        )
+        with mock.patch.object(self.host, "_output") as output:
+            self.host._handle({"event": "audio", "attempt": 1, "data": "00"})
+        output.assert_not_called()
+        self.assertEqual(self.owner._voice_audio.stats.frames, 1)
+        self.assertEqual(self.owner._voice_audio.stats.samples, len(samples))
+        self.owner._voice_audio.writer.submit.assert_not_called()
+        self.owner._set_runtime_voice_result.assert_called_with("receiving_audio")
+        self.assertTrue(self.host._stop_host("released"))
+        self.local_runtime.submit.assert_called_once()
+        arguments = self.local_runtime.submit.call_args.args
+        self.assertIs(arguments[0], owner)
+        self.assertEqual(arguments[1], pcm_bytes_from_samples(samples))
+        self.assertEqual(arguments[2], {
+            "provider": "fun_asr_nano",
+            "faster_whisper_model": "base",
+            "faster_whisper_threads": 2,
+            "faster_whisper_beam_size": 5,
+        })
+        self.assertEqual(arguments[3], ("window", 42, "snapshot"))
+        self.owner._voice_audio.flush.assert_not_called()
+        self.owner._voice_shortcut.apply.assert_not_called()
+
+    def test_local_release_publishes_finishing_before_inference_and_preserves_completion(self):
+        self.start_local()
+        self.host._capture_local([1, 2, 3])
+
+        def submit(*args):
+            self.owner._set_runtime_voice_active.assert_called_with(False)
+            self.owner._set_runtime_voice_result.assert_called_with("finishing")
+            self.owner._set_runtime_voice_result("success")
+            return True
+
+        self.local_runtime.submit.side_effect = submit
+        self.assertTrue(self.host._stop_host("released"))
+        self.owner._set_runtime_voice_result.assert_called_with("success")
+
+    def test_local_hold_and_toggle_stops_submit_exactly_once(self):
+        for attempt, reason in enumerate(
+                ("released", "device_ended", "second_press", "time_limit"), 1):
+            with self.subTest(reason=reason):
+                self.local_runtime.reset_mock()
+                self.local_runtime.submit.return_value = True
+                self.local_cancel.reset_mock()
+                owner = self.start_local(
+                    attempt, "toggle" if reason == "second_press" else "hold")
+                self.host._handle({
+                    "event": "host_stop", "attempt": attempt,
+                    "data": None if reason == "released" else reason,
+                })
+                self.host._stop_host(reason)
+                self.host._stop_host()
+                self.local_runtime.submit.assert_called_once()
+                self.assertIs(self.local_runtime.submit.call_args.args[0], owner)
+                self.local_cancel.assert_not_called()
+                self.owner._voice_audio.flush.assert_not_called()
+                self.owner._voice_shortcut.apply.assert_not_called()
+                self.host._handle({
+                    "event": "state", "attempt": attempt, "data": "idle",
+                })
+
+    def test_local_pre_stop_queued_audio_survives_cancellation_mark(self):
+        from ovb_rc003.local_speech_core import pcm_bytes_from_samples
+        self.start_local()
+        samples = [11, -12, 13]
+        self.host.decoder = SimpleNamespace(
+            mic_open=True,
+            handle_audio=mock.Mock(return_value=samples),
+            handle_control=mock.Mock(),
+        )
+        self.host.enqueue({"event": "control", "attempt": 1, "data": PHYSICAL.hex()})
+        self.host.enqueue({"event": "audio", "attempt": 1, "data": "00"})
+        self.host.enqueue({"event": "host_stop", "attempt": 1, "data": None})
+        self.assertTrue(self.host._attempt_cancelled(1))
+        while not self.host.events.empty():
+            self.host._handle(self.host.events.get_nowait())
+        self.host.decoder.handle_control.assert_called_once_with(PHYSICAL)
+        self.host.decoder.handle_audio.assert_called_once_with(b"\x00")
+        self.assertEqual(
+            self.local_runtime.submit.call_args.args[1], pcm_bytes_from_samples(samples))
+
+        # The stopping transition, not the producer mark, is the audio boundary.
+        self.host._handle({"event": "audio", "attempt": 1, "data": "00"})
+        self.host.decoder.handle_audio.assert_called_once()
+        self.local_runtime.submit.assert_called_once()
+
+    def test_local_abnormal_stops_cancel_without_submitting(self):
+        for attempt, abnormal in enumerate(
+                ("cleanup", "input_lost", "stopping", "failure"), 1):
+            with self.subTest(abnormal=abnormal):
+                self.host.stopping.clear()
+                self.host.input_lost.clear()
+                self.local_runtime.reset_mock()
+                self.local_cancel.reset_mock()
+                owner = self.start_local(attempt)
+                if abnormal == "input_lost":
+                    self.host.cancel_recording()
+                elif abnormal == "stopping":
+                    self.host.request_stop()
+                elif abnormal == "failure":
+                    self.host._fail_voice("test startup failure")
+                self.host._stop_host("released" if abnormal != "cleanup" else "")
+                self.host._stop_host("released")
+                self.local_cancel.assert_called_once_with(owner)
+                self.local_runtime.submit.assert_not_called()
+                self.host._handle({
+                    "event": "state", "attempt": attempt, "data": "idle",
+                })
+
+    def test_local_claim_failure_cancels_claim_without_ready_or_submit(self):
+        self.local_claim.side_effect = OSError("test claim failure")
+        self.start_local()
+        self.assertIsNotNone(self.host._local_owner)
+        self.local_cancel.assert_called_once_with(self.host._local_owner)
+        self.local_runtime.submit.assert_not_called()
+        self.assertNotIn(
+            mock.call(1, "ready"), self.host.client.voice_host.call_args_list)
+        self.owner._voice_audio.open.assert_not_called()
+        self.owner._voice_shortcut.apply.assert_not_called()
 
     def test_delayed_confirmation_preserves_pcm_without_exhausting_writer(self):
         # Hold the real worker while five seconds of small decoder frames arrive.
@@ -1204,6 +1431,75 @@ assert not warnings, warnings
             env.pop('TEST_ISOLATED_ROOT', None)
             result = subprocess.run([sys.executable, '-c', probe], env=env, capture_output=True,
                                     text=True, encoding='utf-8', timeout=30)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_faster_whisper_keeps_recording_modes_and_hides_external_controls(self):
+        from tests.test_remote_selection import _QML_PROBE
+
+        bootstrap = _QML_PROBE.split("def click(name):")[0]
+        bootstrap = bootstrap.replace("model = classes['ButtonMappingModel']()", """
+settings = m.config.default_config()
+settings[selection.KEY] = {'schema': 1, 'active': B, 'devices': [{'key': B, 'profile': 'chromecast-remote'}]}
+settings['voice_program']['provider'] = 'fun_asr_nano'
+m.config.save_config(m.config.config_path(), settings)
+model = classes['ButtonMappingModel']()
+""")
+        probe = bootstrap + r'''
+hotkey_reads = []
+def read_hotkey(provider, **kwargs):
+    hotkey_reads.append(provider)
+    return m.voice_hotkey_sync_windows.VoiceHotkeySyncResult(provider, False, 'unexpected_read')
+m.voice_hotkey_sync_windows.read_provider_hotkey = read_hotkey
+window.setWidth(640)
+window.setHeight(480)
+item('voicePageLoader').setProperty('active', True)
+assert QMetaObject.invokeMethod(item('voiceTabButton'), 'pressed')
+for _ in range(12):
+    app.processEvents()
+    window.grabWindow()
+assert controller.activeRemoteProfile == 'chromecast-remote'
+assert not item('voicePageLoader').property('item').property('voiceProgramUnsupported')
+assert item('remoteRecordingModeRow').property('visible')
+assert not item('rc003RemoteRecordingModeRow').property('visible')
+assert item('nanoSettingsRow').property('visible')
+assert not item('voiceHotkeyRow').property('visible')
+assert not item('openVoiceProgramSettingsButton').property('visible')
+assert not item('virtualAudioRow').property('visible')
+assert not item('outputEndpointRow').property('visible')
+assert not item('voiceTestSection').property('visible')
+assert item('remoteRecordingModeCombo').property('enabled')
+controller.setRemoteRecordingPreferences(1, 2)
+for _ in range(12):
+    app.processEvents()
+    window.grabWindow()
+assert controller.remoteRecordingModeIndex == 1
+assert controller.remoteRecordingLimitIndex == 2
+assert item('remoteRecordingModeCombo').property('currentIndex') == 1
+assert item('remoteRecordingLimitCombo').property('currentIndex') == 2
+assert item('remoteRecordingLimitCombo').property('visible')
+assert item('remoteRecordingModeRow').property('descriptionText') == '按一下开始，再按结束；到时停止录音'
+controller.setRemoteRecordingPreferences(0, 2)
+for _ in range(12):
+    app.processEvents()
+    window.grabWindow()
+assert controller.remoteRecordingModeIndex == 0
+assert not item('remoteRecordingLimitCombo').property('visible')
+assert hotkey_reads == [], hotkey_reads
+assert controller.holdVoiceHotkeyText == ''
+saved = m.config.load_config(m.config.config_path())
+assert saved['voice_program']['provider'] == 'fun_asr_nano'
+assert saved['remote_recording_mode'] == 'hold'
+assert saved['remote_recording_limit_seconds'] == 180
+controller.shutdownBackgroundTasks()
+m._shutdown_diagnostics_workers()
+assert not warnings, warnings
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            env = dict(os.environ, LOCALAPPDATA=directory, QT_QPA_PLATFORM="offscreen",
+                       RC003_DISABLE_LIVE_INPUT="1", PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
+            env.pop("TEST_ISOLATED_ROOT", None)
+            result = subprocess.run([sys.executable, "-c", probe], env=env, capture_output=True,
+                                    text=True, encoding="utf-8", timeout=30)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_compact_row_and_detection_callback_in_production_shell(self):

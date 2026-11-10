@@ -43,6 +43,25 @@ class DefaultConfigPrivacyTests(unittest.TestCase):
             defaults["voice_hotkeys_by_provider"]["doubao_ime"]["hold"],
             "ralt",
         )
+        self.assertEqual(
+            defaults["voice_hotkeys_by_provider"]["fun_asr_nano"],
+            {"hold": "", "source": config.VOICE_HOTKEY_SOURCE_DEFAULT},
+        )
+        self.assertEqual(
+            {
+                key: defaults["voice_program"][key]
+                for key in (
+                    "faster_whisper_model",
+                    "faster_whisper_threads",
+                    "faster_whisper_beam_size",
+                )
+            },
+            {
+                "faster_whisper_model": "small",
+                "faster_whisper_threads": 4,
+                "faster_whisper_beam_size": 1,
+            },
+        )
         self.assertNotIn(
             "windows_dictation",
             defaults["voice_hotkeys_by_provider"],
@@ -445,6 +464,75 @@ class DefaultConfigPrivacyTests(unittest.TestCase):
         )
         loaded["remote_recording_mode"] = "toggle"
         self.assertEqual(config.voice_hotkey_trigger_for_settings(loaded), "toggle")
+
+    def test_faster_whisper_settings_and_empty_hotkey_survive_round_trip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            data = config.default_config()
+            data["voice_program"] = {
+                "provider": "fun_asr_nano",
+                "faster_whisper_model": "tiny",
+                "faster_whisper_threads": 8,
+                "faster_whisper_beam_size": 2,
+                "launch_on_bridge_start": True,
+            }
+            data["voice_hotkey"] = "ralt"
+            data["voice_hotkeys"] = {"hold": "ralt"}
+
+            config.save_config(path, data)
+            loaded = config.load_config(path)
+            persisted = json.loads(path.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            {
+                key: loaded["voice_program"][key]
+                for key in (
+                    "provider",
+                    "faster_whisper_model",
+                    "faster_whisper_threads",
+                    "faster_whisper_beam_size",
+                    "launch_on_bridge_start",
+                )
+            },
+            {
+                "provider": "fun_asr_nano",
+                "faster_whisper_model": "tiny",
+                "faster_whisper_threads": 8,
+                "faster_whisper_beam_size": 2,
+                "launch_on_bridge_start": False,
+            },
+        )
+        self.assertEqual(loaded["voice_hotkey"], "")
+        self.assertEqual(loaded["voice_hotkeys"], {"hold": ""})
+        self.assertEqual(
+            loaded["voice_hotkeys_by_provider"]["fun_asr_nano"],
+            {"hold": "", "source": config.VOICE_HOTKEY_SOURCE_DEFAULT},
+        )
+        self.assertEqual(
+            persisted["voice_program"]["faster_whisper_model"], "tiny"
+        )
+        self.assertEqual(persisted["voice_program"]["faster_whisper_threads"], 8)
+        self.assertEqual(persisted["voice_program"]["faster_whisper_beam_size"], 2)
+
+    def test_faster_whisper_empty_hotkey_never_claims_manual_priority(self):
+        data = config.default_config()
+        data["voice_program"] = {"provider": "fun_asr_nano"}
+        config.set_voice_hotkey_for_provider(
+            data,
+            "fun_asr_nano",
+            "",
+            source=config.VOICE_HOTKEY_SOURCE_MANUAL,
+        )
+
+        self.assertEqual(
+            config.voice_hotkey_source_for_provider(data, "fun_asr_nano"),
+            config.VOICE_HOTKEY_SOURCE_DEFAULT,
+        )
+        config._normalize_voice_hotkey(data)
+        self.assertEqual(
+            data["voice_hotkeys_by_provider"]["fun_asr_nano"],
+            {"hold": "", "source": config.VOICE_HOTKEY_SOURCE_DEFAULT},
+        )
 
     def test_schema_7_false_elevation_choice_is_not_replaced_by_sogou_default(self):
         with tempfile.TemporaryDirectory() as tmp:
