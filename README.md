@@ -4,7 +4,7 @@ Windows 蓝牙遥控器语音输入与按键映射工具，支持小米遥控器
 
 ## 下载
 
-[1.0.107 预发布](https://github.com/WuYuStar/vibenano/releases/tag/v1.0.107) · [版本说明](RELEASE_NOTES_1.0.107.md)
+[1.0.107 预发布](https://github.com/WuYuStar/vibenano/releases/tag/v1.0.107) · [版本说明](apps/windows/rc003/release-notes/1.0.107.md)
 
 完整解压便携 ZIP，再运行其中的 `无线麦 win版 1.0.107.exe`。升级前请从托盘完全退出旧版；当前程序内更新入口沿用上游，升级本分支请从本仓库手动下载。
 

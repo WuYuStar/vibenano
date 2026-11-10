@@ -31,4 +31,4 @@ powershell -ExecutionPolicy Bypass -File build\build-candidate.ps1 -PythonExecut
 
 构建链历史上会获取官方 VB-CABLE 安装包；这不代表已获所有用途的再分发许可。当前GitHub CI设置 `RC003_PUBLIC_DISTRIBUTION=1`，PyInstaller不会把驱动ZIP收集进产物。本地公开构建也应先设置同一环境变量。公开应用ZIP须移除 `VBCABLE_Driver_Pack45.zip`，让用户自行从VB-Audio下载，或先取得适用的分发授权。不要改动原厂安装包或把驱动改称本项目GPL代码。
 
-同时提供对应版本源码、Nano固定上游源码归档、完整第三方许可和校验文件。Qt对应源码见 THIRD_PARTY_SOURCE.md；发布过程见 GITHUB_RELEASE.md。
+同时提供对应版本源码、Nano固定上游源码归档、完整第三方许可和校验文件。Qt对应源码见 THIRD_PARTY_SOURCE.md。发布时附上应用ZIP、完整源码ZIP和SHA256SUMS.txt，并在GitHub Releases注明验证范围。

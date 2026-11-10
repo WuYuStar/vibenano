@@ -10,6 +10,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[4]
 APP = ROOT / "apps/windows/rc003"
+RELEASE_NOTES = APP / "release-notes/1.0.107.md"
 PRIVATE_PREFIXES = (".codex/", ".build/", ".git/", "dist/")
 SECRET_PATTERNS = (
     re.compile(rb"(?m)^-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
@@ -87,8 +88,9 @@ def main():
             if relative.startswith("说明与许可/"):
                 continue
             bundle.writestr(info.filename, origin.read(info))
-        for name in ("LICENSE.md", "COPYRIGHT.md", "THIRD_PARTY_NOTICES.md", "THIRD_PARTY_SOURCE.md", "ASSET_LICENSES.md", "RELEASE_NOTES_1.0.107.md"):
+        for name in ("LICENSE.md", "COPYRIGHT.md", "THIRD_PARTY_NOTICES.md", "THIRD_PARTY_SOURCE.md", "ASSET_LICENSES.md"):
             bundle.write(ROOT / name, root + "/说明与许可/" + name)
+        bundle.write(RELEASE_NOTES, root + "/说明与许可/版本说明.md")
         bundle.write(APP / "ATTRIBUTION.md", root + "/说明与许可/ATTRIBUTION.md")
         bundle.write(APP / "installer/readme-portable-rc003.txt", root + "/说明与许可/使用说明.txt")
         for base in (ROOT / "THIRD_PARTY_LICENSES", APP / "build/nano"):
@@ -97,8 +99,8 @@ def main():
                     bundle.write(path, root + "/说明与许可/" + base.name + "/" + path.relative_to(base).as_posix())
     sums = "".join(sha(path) + "  " + path.name + "\n" for path in (portable, source))
     (output / "SHA256SUMS.txt").write_text(sums, encoding="ascii")
-    (output / "发布说明.md").write_text((ROOT / "RELEASE_NOTES_1.0.107.md").read_text(), encoding="utf-8")
-    (output / "上传步骤.md").write_text((ROOT / "GITHUB_RELEASE.md").read_text(), encoding="utf-8")
+    (output / "发布说明.md").write_text(RELEASE_NOTES.read_text(), encoding="utf-8")
+    (output / "上传步骤.md").write_text("在 https://github.com/WuYuStar/vibenano/releases 创建对应版本的预发布，使用发布说明.md作为正文，并同时上传应用ZIP、源码ZIP和SHA256SUMS.txt。\n", encoding="utf-8")
     (output / "source-file-list.txt").write_text("\n".join(name for name, _ in files) + "\n", encoding="utf-8")
     report = {"version": version, "source_files": len(files), "credentials_scan": "no configured high-confidence pattern found",
         "excluded_private_prefixes": PRIVATE_PREFIXES, "removed_vendor_files": omitted,

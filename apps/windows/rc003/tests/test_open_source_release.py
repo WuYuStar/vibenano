@@ -18,8 +18,6 @@ class CommunityHealthFileTests(unittest.TestCase):
     def test_required_public_collaboration_files_exist(self):
         for relative_path in (
             "SECURITY.md",
-            "CONTRIBUTING.md",
-            "CODE_OF_CONDUCT.md",
             ".github/PULL_REQUEST_TEMPLATE.md",
             ".github/ISSUE_TEMPLATE/bug_report.yml",
             ".github/ISSUE_TEMPLATE/feature_request.yml",

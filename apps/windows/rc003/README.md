@@ -262,11 +262,7 @@ $env:PYTHONPATH = Join-Path $PWD.ProviderPath 'src'
 
 维护资料：
 
-- [当前维护与历史证据](MAINTENANCE.md)
 - [测试队列与验收结果](TESTING.md)
-- [Windows 架构账目](WINDOWS-ARCHITECTURE-LEDGER.md)
-- [性能记录](PERFORMANCE.md)
-- [验证与交付规则](VALIDATION-AND-DELIVERY.md)
 - [版本历史](CHANGELOG.md)
 
 </details>
@@ -274,4 +270,4 @@ $env:PYTHONPATH = Join-Path $PWD.ProviderPath 'src'
 
 ## 公开源码与构建
 
-本项目按 GPL-3.0-only 发布，保留上游版权、完整许可及归属记录。新环境先按仓库根目录 BUILDING.md 编译 Nano 工作程序，再执行 Windows 构建。公开发布说明见 GITHUB_RELEASE.md。公开1.0.107附件不附带VB-CABLE驱动，外部输入法用户须自行从官网下载安装；原有本机自用包不在本轮替换。
+本项目按 GPL-3.0-only 发布，保留上游版权、完整许可及归属记录。新环境先按仓库根目录 BUILDING.md 编译 Nano 工作程序，再执行 Windows 构建。版本说明见 release-notes/1.0.107.md。公开1.0.107附件不附带VB-CABLE驱动，外部输入法用户须自行从官网下载安装；原有本机自用包不在本轮替换。
