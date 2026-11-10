@@ -13,3 +13,6 @@ docs/*
 !docs/screenshots/settings-connection.png
 !docs/screenshots/settings-buttons.png
 AGENTS.md
+
+# Public build instructions.
+!docs/BUILDING.md

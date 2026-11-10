@@ -222,7 +222,7 @@ Chatterfly：确认程序已运行且没有另一段录音；仍失败时导出�
 
 配置、模型缓存和日志保存在本机。无线麦不向项目服务器上传遥控器地址、按键记录、录音、识别文本或个人数据。使用本地识别时，模型托管站点只用于模型下载和更新查询，本地引擎不上传音频或识别文本；外部语音程序是否联网、如何识别和润色由该程序自身决定。“检查更新”仍按前文说明访问本项目的 GitHub Releases。
 
-VB-CABLE 是 VB-Audio 的独立 Donationware。详见[组件说明](ATTRIBUTION.md)、[第三方许可](../../../THIRD_PARTY_NOTICES.md)和[素材授权](../../../ASSET_LICENSES.md)。
+VB-CABLE 是 VB-Audio 的独立 Donationware。详见[组件说明](ATTRIBUTION.md)、[第三方许可](../../../legal/THIRD_PARTY_NOTICES.md)和[素材授权](../../../legal/ASSET_LICENSES.md)。
 
 <details>
 <summary>源码运行与维护入口</summary>
@@ -270,4 +270,4 @@ $env:PYTHONPATH = Join-Path $PWD.ProviderPath 'src'
 
 ## 公开源码与构建
 
-本项目按 GPL-3.0-only 发布，保留上游版权、完整许可及归属记录。新环境先按仓库根目录 BUILDING.md 编译 Nano 工作程序，再执行 Windows 构建。版本说明见 release-notes/1.0.107.md。公开1.0.107附件不附带VB-CABLE驱动，外部输入法用户须自行从官网下载安装；原有本机自用包不在本轮替换。
+本项目按 GPL-3.0-only 发布，保留上游版权、完整许可及归属记录。新环境先按docs/BUILDING.md 编译 Nano 工作程序，再执行 Windows 构建。版本说明见 release-notes/1.0.107.md。公开1.0.107附件不附带VB-CABLE驱动，外部输入法用户须自行从官网下载安装；原有本机自用包不在本轮替换。

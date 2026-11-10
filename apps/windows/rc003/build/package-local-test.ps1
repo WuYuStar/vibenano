@@ -152,10 +152,10 @@ try {
     $documentationDir = Join-Path $stagingDir ([string]$productPresentation.documentation_directory_name)
     New-Item -ItemType Directory -Path $documentationDir -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $RepoRoot "LICENSE.md") -Destination (Join-Path $documentationDir "LICENSE.txt") -Force
-    Copy-Item -LiteralPath (Join-Path $RepoRoot "COPYRIGHT.md") -Destination (Join-Path $documentationDir "COPYRIGHT.txt") -Force
-    Copy-Item -LiteralPath (Join-Path $RepoRoot "THIRD_PARTY_NOTICES.md") -Destination (Join-Path $documentationDir "THIRD_PARTY_NOTICES.md") -Force
-    Copy-Item -LiteralPath (Join-Path $RepoRoot "THIRD_PARTY_SOURCE.md") -Destination (Join-Path $documentationDir "THIRD_PARTY_SOURCE.md") -Force
-    Copy-Item -LiteralPath (Join-Path $RepoRoot "ASSET_LICENSES.md") -Destination (Join-Path $documentationDir "ASSET_LICENSES.md") -Force
+    Copy-Item -LiteralPath (Join-Path $RepoRoot "legal/COPYRIGHT.md") -Destination (Join-Path $documentationDir "COPYRIGHT.txt") -Force
+    Copy-Item -LiteralPath (Join-Path $RepoRoot "legal/THIRD_PARTY_NOTICES.md") -Destination (Join-Path $documentationDir "THIRD_PARTY_NOTICES.md") -Force
+    Copy-Item -LiteralPath (Join-Path $RepoRoot "legal/THIRD_PARTY_SOURCE.md") -Destination (Join-Path $documentationDir "THIRD_PARTY_SOURCE.md") -Force
+    Copy-Item -LiteralPath (Join-Path $RepoRoot "legal/ASSET_LICENSES.md") -Destination (Join-Path $documentationDir "ASSET_LICENSES.md") -Force
     Copy-Item -LiteralPath (Join-Path $RepoRoot "THIRD_PARTY_LICENSES") -Destination (Join-Path $documentationDir "THIRD_PARTY_LICENSES") -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $RC003Root "ATTRIBUTION.md") -Destination (Join-Path $documentationDir "ATTRIBUTION.md") -Force
     Copy-Item -LiteralPath (Join-Path $RC003Root "installer\readme-portable-rc003.txt") -Destination (Join-Path $documentationDir ([string]$productPresentation.portable_readme_name)) -Force

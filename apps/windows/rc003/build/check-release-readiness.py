@@ -11,8 +11,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
 _STATUS_REQUIREMENTS = (
-    (REPO_ROOT / "ASSET_LICENSES.md", "Release status: APPROVED"),
-    (REPO_ROOT / "THIRD_PARTY_SOURCE.md", "Release status: READY"),
+    (REPO_ROOT / "legal" / "ASSET_LICENSES.md", "Release status: APPROVED"),
+    (REPO_ROOT / "legal" / "THIRD_PARTY_SOURCE.md", "Release status: READY"),
 )
 _REQUIRED_LICENSE_FILES = (
     "Python-3.12/LICENSE.txt",

@@ -26,10 +26,10 @@ Windows 蓝牙遥控器语音输入与按键映射工具，支持小米遥控器
 
 要求 Windows x64，Nano 需要支持 AVX2/F16C/FMA 的 CPU，主要验证环境为 Windows 11。1.0.107 为预发布，打包后未补做运行测试，具体范围见版本说明。
 
-[详细使用说明](apps/windows/rc003/README.md) · [源码构建](BUILDING.md) · [问题反馈](https://github.com/WuYuStar/vibenano/issues)
+[详细使用说明](apps/windows/rc003/README.md) · [源码构建](docs/BUILDING.md) · [问题反馈](https://github.com/WuYuStar/vibenano/issues)
 
 ## 来源与许可
 
 由 [WuYuStar](https://github.com/WuYuStar) 基于 [ZSTDJan/windows-remote-mic-app](https://github.com/ZSTDJan/windows-remote-mic-app) 二次开发，Windows 实现源于 [nijez/open-voice-bridge](https://github.com/nijez/open-voice-bridge)。保留原作者版权与署名，按 [GPL-3.0-only](LICENSE.md) 发布。
 
-[归属说明](apps/windows/rc003/ATTRIBUTION.md) · [第三方许可](THIRD_PARTY_NOTICES.md) · [素材授权](ASSET_LICENSES.md)
+[归属说明](apps/windows/rc003/ATTRIBUTION.md) · [第三方许可](legal/THIRD_PARTY_NOTICES.md) · [素材授权](legal/ASSET_LICENSES.md)

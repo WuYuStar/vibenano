@@ -21,7 +21,7 @@ filelock==4.2.9
 # community edition (what both packages are) is available under open-source
 # terms (LGPLv3, with some modules under GPLv3) or a separate commercial Qt
 # license; this project installs only the open-source community edition
-# from PyPI, under no commercial license - see THIRD_PARTY_NOTICES.md for
+# from PyPI, under no commercial license - see legal/THIRD_PARTY_NOTICES.md for
 # the full notice. Only settings_ui.py's ``main()``/qt_settings_app.py
 # import PySide6 at all, and only lazily inside a function body (see
 # qt_settings_app.py's module docstring) - importing any other module in

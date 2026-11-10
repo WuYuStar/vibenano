@@ -17,7 +17,13 @@ BUILD_ROOT = RC003_ROOT / "build"
 class CommunityHealthFileTests(unittest.TestCase):
     def test_required_public_collaboration_files_exist(self):
         for relative_path in (
-            "SECURITY.md",
+            "README.md",
+            "LICENSE.md",
+            "docs/BUILDING.md",
+            "legal/COPYRIGHT.md",
+            "legal/THIRD_PARTY_NOTICES.md",
+            "legal/THIRD_PARTY_SOURCE.md",
+            "legal/ASSET_LICENSES.md",
             ".github/PULL_REQUEST_TEMPLATE.md",
             ".github/ISSUE_TEMPLATE/bug_report.yml",
             ".github/ISSUE_TEMPLATE/feature_request.yml",
@@ -169,7 +175,7 @@ class ThirdPartyReleaseGateTests(unittest.TestCase):
             self.assertTrue((license_root / relative_path).is_file(), relative_path)
 
     def test_local_speech_packages_have_tagged_notices_and_required_licenses(self):
-        notice_text = (REPO_ROOT / "THIRD_PARTY_NOTICES.md").read_text(
+        notice_text = (REPO_ROOT / "legal" / "THIRD_PARTY_NOTICES.md").read_text(
             encoding="utf-8"
         )
         script_path = BUILD_ROOT / "check-release-readiness.py"
@@ -217,7 +223,7 @@ class ThirdPartyReleaseGateTests(unittest.TestCase):
         self.assertIn("source of truth", notice_text)
 
     def test_model_cards_are_separate_from_the_frozen_package_payload(self):
-        notice_text = (REPO_ROOT / "THIRD_PARTY_NOTICES.md").read_text(
+        notice_text = (REPO_ROOT / "legal" / "THIRD_PARTY_NOTICES.md").read_text(
             encoding="utf-8"
         )
         self.assertIn("No Whisper model weights", notice_text)

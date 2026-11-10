@@ -338,7 +338,7 @@ function Get-RC003BuildInputFiles {
     # Native worker and recipe are also inputs to the frozen application.
     $nanoRecipe = Join-Path $RC003Root "build\nano"
     if (Test-Path -LiteralPath $nanoRecipe -PathType Container) {
-        foreach ($file in Get-ChildItem -LiteralPath $nanoRecipe -File -Recurse) {
+        foreach ($file in Get-ChildItem -LiteralPath $nanoRecipe -Force -File -Recurse) {
             $files.Add($file)
         }
     }
@@ -380,11 +380,11 @@ function Get-RC003BuildInputFiles {
         (Join-Path $RepoRoot "README.md"),
         (Join-Path $RepoRoot "Resources\RC003-remote-photo.png"),
         (Join-Path $RepoRoot "Resources\Chromecast-remote-photo.png"),
-        (Join-Path $RepoRoot "ASSET_LICENSES.md"),
-        (Join-Path $RepoRoot "COPYRIGHT.md"),
+        (Join-Path $RepoRoot "legal/ASSET_LICENSES.md"),
+        (Join-Path $RepoRoot "legal/COPYRIGHT.md"),
         (Join-Path $RepoRoot "LICENSE.md"),
-        (Join-Path $RepoRoot "THIRD_PARTY_NOTICES.md"),
-        (Join-Path $RepoRoot "THIRD_PARTY_SOURCE.md")
+        (Join-Path $RepoRoot "legal/THIRD_PARTY_NOTICES.md"),
+        (Join-Path $RepoRoot "legal/THIRD_PARTY_SOURCE.md")
     )
     foreach ($path in $requiredFiles) {
         if (-not (Test-Path -LiteralPath $path -PathType Leaf -ErrorAction Stop)) {

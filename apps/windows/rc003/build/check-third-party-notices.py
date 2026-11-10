@@ -8,7 +8,7 @@ from pathlib import Path
 
 RC003_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(__file__).resolve().parents[4]
-NOTICE_PATH = REPO_ROOT / "THIRD_PARTY_NOTICES.md"
+NOTICE_PATH = REPO_ROOT / "legal" / "THIRD_PARTY_NOTICES.md"
 
 _PIN_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)==(?P<version>[^;\s]+)")
 _CORE_MARKERS = (

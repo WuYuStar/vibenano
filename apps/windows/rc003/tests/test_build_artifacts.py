@@ -52,7 +52,7 @@ def _formal_version_from_landing(landing):
     if match is None:
         raise AssertionError("landing page does not identify a formal release")
     return match.group(1)
-_THIRD_PARTY_NOTICES_PATH = _REPO_ROOT / "THIRD_PARTY_NOTICES.md"
+_THIRD_PARTY_NOTICES_PATH = _REPO_ROOT / "legal" / "THIRD_PARTY_NOTICES.md"
 
 
 def _exec_as_top_level_no_package(path: Path, *, module_name: str) -> None:
@@ -1440,6 +1440,7 @@ class InnoSetupScriptTests(unittest.TestCase):
 class WindowsCiWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.text = _CI_PATH.read_text(encoding="utf-8")
+        self.windows_job = self.text.split("  test-and-build:\n", 1)[1]
 
     def test_targets_windows_runner(self):
         self.assertIn("runs-on: windows-2025", self.text)
@@ -1555,8 +1556,9 @@ class WindowsCiWorkflowTests(unittest.TestCase):
             self.text.count(
                 "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
             ),
-            1,
+            2,
         )
+        self.assertIn("actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131", self.text)
         self.assertNotIn("uses: actions/checkout@v", self.text)
         self.assertNotIn("uses: actions/setup-python@v", self.text)
         self.assertNotIn("uses: actions/upload-artifact@v", self.text)
@@ -1574,10 +1576,10 @@ class WindowsCiWorkflowTests(unittest.TestCase):
             "uses: actions/upload-artifact@"
             "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
         )
-        self.assertEqual(self.text.count(upload_marker), 1)
-        runtime_index = self.text.index("--qt-runtime-check", self.text.index("- name: PyInstaller build"))
-        package_index = self.text.index("Compress-Archive")
-        upload_index = self.text.index(upload_marker)
+        self.assertEqual(self.windows_job.count(upload_marker), 1)
+        runtime_index = self.windows_job.index("--qt-runtime-check", self.windows_job.index("- name: PyInstaller build"))
+        package_index = self.windows_job.index("Compress-Archive")
+        upload_index = self.windows_job.index(upload_marker)
         self.assertLess(runtime_index, upload_index)
         self.assertLess(package_index, upload_index)
 
@@ -1596,11 +1598,11 @@ class WindowsCiWorkflowTests(unittest.TestCase):
         # which is unrelated to the push/pull_request trigger list and
         # must not be counted as a trigger occurrence.
         for path_trigger in (
-            "COPYRIGHT.md",
+            "legal/COPYRIGHT.md",
             "LICENSE.md",
-            "THIRD_PARTY_NOTICES.md",
-            "THIRD_PARTY_SOURCE.md",
-            "ASSET_LICENSES.md",
+            "legal/THIRD_PARTY_NOTICES.md",
+            "legal/THIRD_PARTY_SOURCE.md",
+            "legal/ASSET_LICENSES.md",
             "THIRD_PARTY_LICENSES/**",
             "Resources/RC003-remote-photo.png",
             "device-profiles/xiaomi-rc003.json",
@@ -1730,19 +1732,19 @@ class WindowsCiWorkflowTests(unittest.TestCase):
             self.text,
         )
         self.assertIn(
-            'Copy-Item -Path "../../../COPYRIGHT.md" -Destination (Join-Path $documentationDir "COPYRIGHT.txt")',
+            'Copy-Item -Path "../../../legal/COPYRIGHT.md" -Destination (Join-Path $documentationDir "COPYRIGHT.txt")',
             self.text,
         )
         self.assertIn(
-            'Copy-Item -Path "../../../THIRD_PARTY_NOTICES.md" -Destination (Join-Path $documentationDir "THIRD_PARTY_NOTICES.md")',
+            'Copy-Item -Path "../../../legal/THIRD_PARTY_NOTICES.md" -Destination (Join-Path $documentationDir "THIRD_PARTY_NOTICES.md")',
             self.text,
         )
         self.assertIn(
-            'Copy-Item -Path "../../../THIRD_PARTY_SOURCE.md" -Destination (Join-Path $documentationDir "THIRD_PARTY_SOURCE.md")',
+            'Copy-Item -Path "../../../legal/THIRD_PARTY_SOURCE.md" -Destination (Join-Path $documentationDir "THIRD_PARTY_SOURCE.md")',
             self.text,
         )
         self.assertIn(
-            'Copy-Item -Path "../../../ASSET_LICENSES.md" -Destination (Join-Path $documentationDir "ASSET_LICENSES.md")',
+            'Copy-Item -Path "../../../legal/ASSET_LICENSES.md" -Destination (Join-Path $documentationDir "ASSET_LICENSES.md")',
             self.text,
         )
         self.assertIn(
@@ -1981,10 +1983,10 @@ class WindowsCiWorkflowTests(unittest.TestCase):
         self.assertIn("$actualHash -ne $expectedHash", step)
 
     def test_preflight_runs_before_the_upload_step(self):
-        preflight_index = self.text.index(
+        preflight_index = self.windows_job.index(
             "$releaseFiles = @(Get-ChildItem -Path $releaseDir -File)"
         )
-        upload_index = self.text.index(
+        upload_index = self.windows_job.index(
             "uses: actions/upload-artifact@"
             "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
         )
@@ -2240,11 +2242,11 @@ class BuildProvenanceScriptTests(unittest.TestCase):
                 repo_root / "README.md": "fixture\n",
                 repo_root / "Resources" / "RC003-remote-photo.png": b"png",
                 chromecast_photo: b"chromecast-photo",
-                repo_root / "ASSET_LICENSES.md": "fixture\n",
-                repo_root / "COPYRIGHT.md": "fixture\n",
+                repo_root / "legal" / "ASSET_LICENSES.md": "fixture\n",
+                repo_root / "legal" / "COPYRIGHT.md": "fixture\n",
                 repo_root / "LICENSE.md": "fixture\n",
-                repo_root / "THIRD_PARTY_NOTICES.md": "fixture\n",
-                repo_root / "THIRD_PARTY_SOURCE.md": "fixture\n",
+                repo_root / "legal" / "THIRD_PARTY_NOTICES.md": "fixture\n",
+                repo_root / "legal" / "THIRD_PARTY_SOURCE.md": "fixture\n",
                 repo_root / "THIRD_PARTY_LICENSES" / "sample.txt": "fixture\n",
                 repo_root / "device-profiles" / "rc003.json": "{}\n",
             }

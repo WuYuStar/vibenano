@@ -5,7 +5,7 @@
 本仓库的历史来源为 [`HD838A/remote-mic-app`](https://github.com/HD838A/remote-mic-app)。
 当前无线麦 Windows 版由本项目独立维护；macOS/Swift 工程不属于本仓库维护范围。
 此处记录代码和仓库沿革，具体第三方代码与许可见下文及仓库根目录的
-[`THIRD_PARTY_NOTICES.md`](../../../THIRD_PARTY_NOTICES.md)。
+[`THIRD_PARTY_NOTICES.md`](../../../legal/THIRD_PARTY_NOTICES.md)。
 
 本目录中的 Windows RC003 客户端基于以下 GPL-3.0-only 项目改造：
 
@@ -45,7 +45,7 @@ PyInstaller/Inno Setup 构建流程。本仓库在 GPL-3.0-only 条件下保留�
   HID tap/F5 拦截和清理重试合同，没有引入其程序二进制或配置系统。
 
 RC003 的 ATVV UUID、控制命令、IMA/DVI ADPCM 解码和 HID 映射事实见仓库根目录的
-[`THIRD_PARTY_NOTICES.md`](../../../THIRD_PARTY_NOTICES.md)；本分支不依赖另一个平台
+[`THIRD_PARTY_NOTICES.md`](../../../legal/THIRD_PARTY_NOTICES.md)；本分支不依赖另一个平台
 的实现文件。
 
 VB-CABLE 是 VB-Audio 的独立第三方软件，不属于本项目的 GPL 代码。Windows 构建

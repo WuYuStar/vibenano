@@ -89,7 +89,8 @@ def main():
                 continue
             bundle.writestr(info.filename, origin.read(info))
         for name in ("LICENSE.md", "COPYRIGHT.md", "THIRD_PARTY_NOTICES.md", "THIRD_PARTY_SOURCE.md", "ASSET_LICENSES.md"):
-            bundle.write(ROOT / name, root + "/说明与许可/" + name)
+            origin_path = ROOT / name if name == "LICENSE.md" else ROOT / "legal" / name
+            bundle.write(origin_path, root + "/说明与许可/" + name)
         bundle.write(RELEASE_NOTES, root + "/说明与许可/版本说明.md")
         bundle.write(APP / "ATTRIBUTION.md", root + "/说明与许可/ATTRIBUTION.md")
         bundle.write(APP / "installer/readme-portable-rc003.txt", root + "/说明与许可/使用说明.txt")

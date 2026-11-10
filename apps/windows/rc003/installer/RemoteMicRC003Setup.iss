@@ -74,12 +74,12 @@ RestartApplications=no
 ; has actually run the new executable successfully.
 Source: "{#DistDir}\*"; DestDir: "{app}"; Excludes: "{#AppExeName}"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "readme-rc003.txt"; DestDir: "{app}"; Flags: isreadme ignoreversion
-Source: "..\..\..\..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; DestName: "THIRD_PARTY_NOTICES.md"; Flags: ignoreversion
-Source: "..\..\..\..\THIRD_PARTY_SOURCE.md"; DestDir: "{app}"; DestName: "THIRD_PARTY_SOURCE.md"; Flags: ignoreversion
-Source: "..\..\..\..\ASSET_LICENSES.md"; DestDir: "{app}"; DestName: "ASSET_LICENSES.md"; Flags: ignoreversion
+Source: "..\..\..\..\legal\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; DestName: "THIRD_PARTY_NOTICES.md"; Flags: ignoreversion
+Source: "..\..\..\..\legal\THIRD_PARTY_SOURCE.md"; DestDir: "{app}"; DestName: "THIRD_PARTY_SOURCE.md"; Flags: ignoreversion
+Source: "..\..\..\..\legal\ASSET_LICENSES.md"; DestDir: "{app}"; DestName: "ASSET_LICENSES.md"; Flags: ignoreversion
 Source: "..\..\..\..\THIRD_PARTY_LICENSES\*"; DestDir: "{app}\THIRD_PARTY_LICENSES"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "..\..\..\..\LICENSE.md"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
-Source: "..\..\..\..\COPYRIGHT.md"; DestDir: "{app}"; DestName: "COPYRIGHT.txt"; Flags: ignoreversion
+Source: "..\..\..\..\legal\COPYRIGHT.md"; DestDir: "{app}"; DestName: "COPYRIGHT.txt"; Flags: ignoreversion
 ; stop-app.ps1 is shipped TWICE on purpose, for two different lifecycles:
 ;   - the "dontcopy" entry below makes it available to ExtractTemporaryFile
 ;     in PrepareToInstall, so an in-place upgrade can stop a running instance
