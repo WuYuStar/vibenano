@@ -1,144 +1,35 @@
-# VibeNano · 无线麦 Windows 衍生版
+# VibeNano
 
-无线麦把蓝牙语音遥控器的按键和麦克风变成 Windows 快捷操作与语音输入工具，可远距离控制应用、输入文字和触发 Quicker 动作。
+Windows 蓝牙遥控器语音输入与按键映射工具，支持小米遥控器2 Pro 和图示谷歌 Chromecast 遥控器。应用内名称暂沿用“无线麦”。
 
-支持按键单击、双击、长按映射，适配小米遥控器2 Pro 和图示谷歌 Chromecast 遥控器，可配合搜狗、微信、豆包和 Chatterfly 使用；1.0.107 使用 Fun-ASR-Nano 在本机识别中英文。QQ 群：89641716。
+## 下载
 
-| 谷歌遥控器按键映射 | 小米遥控器按键映射 |
-| --- | --- |
-| ![谷歌遥控器按键设置界面](docs/screenshots/google-buttons.jpg) | ![小米遥控器按键设置界面](docs/screenshots/xiaomi-buttons.jpg) |
+[1.0.107 预发布](https://github.com/WuYuStar/vibenano/releases/tag/v1.0.107) · [版本说明](RELEASE_NOTES_1.0.107.md)
 
-![图示谷歌与小米遥控器实物对比](docs/images/remote-comparison.png)
+完整解压便携 ZIP，再运行其中的 `无线麦 win版 1.0.107.exe`。升级前请从托盘完全退出旧版；当前程序内更新入口沿用上游，升级本分支请从本仓库手动下载。
 
-设备参考：
+## 主要功能
 
-- 小米遥控器2 Pro：参考价约 65–99 元，Type-C 充电；仅支持按住型，单次录音限制在 60 秒内。
-- 图示谷歌遥控器：参考价约 15 元，支持按住型和开关型；可录制超过 60 秒，开关型可设置自动结束时长。
-- 谷歌遥控器版本较多，购买前请核对电池仓内的型号信息；其它版本的兼容性不能仅凭外观判断。
-- 图示谷歌款购自某多多平台「金利达数码科技大全」，仅作型号参考，无利益关联。
+- **本地语音识别**：Fun-ASR-Nano CPU 量化引擎，支持中英文混合输入；首次下载约1.28GB模型，之后可离线使用。
+- **自定义按键**：单击、双击、长按分别映射快捷键、文字、Quicker 动作或打开程序，也可选择 ChatGPT 等商店应用。
+- **录音反馈**：录音显示波形，识别显示圆环动画。
+- **外部输入法**：保留搜狗、微信、豆包和 Chatterfly；使用这条路径需自行安装 VB-CABLE，本地识别不需要。
 
-VibeNano 由 [WuYuStar](https://github.com/WuYuStar) 基于 [ZSTDJan/windows-remote-mic-app](https://github.com/ZSTDJan/windows-remote-mic-app) 继续修改维护。Windows 实现源于 [nijez/open-voice-bridge](https://github.com/nijez/open-voice-bridge)，按 **GPL-3.0-only** 发布；原作者的版权、许可和沿革保留于 [归属说明](apps/windows/rc003/ATTRIBUTION.md)。本仓库独立维护 1.0.107 的 Nano 识别、商店应用映射和交互改进。应用内名称暂沿用“无线麦”。
-
-## 下载与版本
-
-**1.0.107 预发布：** 仅保留 Nano 本地识别，新增商店应用选择、录音与识别动画和模型下载管理。[本版说明](RELEASE_NOTES_1.0.107.md) · [VibeNano 版本下载](https://github.com/WuYuStar/vibenano/releases)。下方1.0.103是上游历史版本；VibeNano 1.0.107 以本仓库 Releases 实际附件为准。
-
-**[下载正式版 1.0.103](https://github.com/ZSTDJan/windows-remote-mic-app/releases/download/v1.0.103/RemoteMicRC003-1.0.103-portable-unsigned.zip)** · [版本说明](https://github.com/ZSTDJan/windows-remote-mic-app/releases/tag/v1.0.103) · [SHA256SUMS.txt](https://github.com/ZSTDJan/windows-remote-mic-app/releases/download/v1.0.103/SHA256SUMS.txt)
-
-上游历史正式版为 **1.0.103**，本版主要变化：
-
-- 新增“输入文字”和“打开程序”按键动作，单击、双击、长按可分别设置。
-- 修复谷歌遥控器连续语音时，上一句结束后紧接着按下一句可能不生效的问题；改善按键接收中断后的自动恢复。
-- 改善谷歌遥控器在部分蓝牙驱动下的兼容性，增加豆包输入法 1.0.0.23 适配。
-- 补充设备读取失败的错误日志，并在选择豆包时显示更新提醒。
-
-**已知问题：** 部分电脑的连接失败、断联、设备列表缺失及首次语音异常仍未全部解决。
-
-**验证范围：** 1.0.107 已完成源码回归和本机合成音识别检查；最近一次本地便携打包按维护者要求跳过包后运行测试。本版以预发布形式提供，不能把源码测试当作所有电脑和遥控器的硬件验收。
-
-上游旧版可在 [上游历史版本](https://github.com/ZSTDJan/windows-remote-mic-app/releases) 中下载。
-
-升级时先完全退出旧版，将新 ZIP 解压到新文件夹，再运行新版。同一台电脑、同一个 Windows 账户下会沿用原配置，无需手动复制。
-
-完整解压 ZIP 后运行其中的 `无线麦 win版 <版本号>.exe`，不要只取出 EXE。程序未签名，Windows 可能弹出安全提示；请从本仓库下载。
-
-## 能做什么
-
-- 给遥控器按键设置方向、确认、音量、快捷键、鼠标操作、Quicker、输入文字或打开程序；同一按键可分别设置单击、双击和长按。
-- 用遥控器话筒键说话，在文字输入框中使用搜狗、微信、豆包或 Chatterfly 输入文字；也可使用内置 Fun-ASR-Nano 在本机识别并粘贴文字。
-- 在“管理按键配置”中复制、应用、重命名和删除配置副本，或导出／导入文件备份；当前映射始终自动保存。
-- 在通知区域保持运行；关闭设置窗口通常会隐藏，结束程序请从通知区域选择“完全退出”。
-
-## 第一次使用
-
-- **系统兼容性：** 开发环境为 Windows 11 23H2。较早 Windows 版本的兼容性尚未全面验证。
-- **首次配置前，请先暂时退出 360 等杀毒软件；配置和测试完成后及时恢复防护。**
-- **误报与隔离：** 部分杀毒软件可能误报或隔离无线麦及相关组件，导致启动、按键或语音异常。请先核实来自本仓库，并核对下载页的 SHA-256。
-- **信任与白名单：** 确认为误报后，在杀毒软件中恢复相关文件，将无线麦程序或其专用安装／解压目录加入信任或白名单；范围仅限无线麦，保留其它防护。
-- **使用搜狗、微信、豆包或 Chatterfly 时，首次使用语音前必须先安装虚拟音频组件 VB-CABLE，并重启电脑；重启后再配置语音。本地语音识别不需要 VB-CABLE。**
-
-### 先让遥控器按键可用
+## 快速开始
 
 1. 在 Windows 蓝牙设置中配对遥控器。
-2. 打开无线麦，进入“设备”页。
-3. 点“选择设备”，选中刚配对的遥控器并点“使用此设备”。
-4. 点“启动服务”，查看连接状态；如有未就绪提示，按页面说明处理。
-5. 连接后按一次方向键，确认能控制电脑。
+2. 打开程序，在“设备”页选择遥控器并启动服务。
+3. 在“语音”页选择 Fun-ASR-Nano，下载模型。
+4. 将光标放入文字框，按住话筒键说话，松开后输入文字。
 
-需要自定义按键时：
+按键映射在“按键”页修改；模型下载支持暂停、继续和失败重试。
 
-1. 到“按键”页选择要修改的按键。
-2. 设置该按键的单击、双击或长按动作。
-3. 点“完成”保存。
+要求 Windows x64，Nano 需要支持 AVX2/F16C/FMA 的 CPU，主要验证环境为 Windows 11。1.0.107 为预发布，打包后未补做运行测试，具体范围见版本说明。
 
-![设备选择与连接状态教程](docs/screenshots/device-ready-status.jpg)
+[详细使用说明](apps/windows/rc003/README.md) · [源码构建](BUILDING.md) · [问题反馈](https://github.com/WuYuStar/vibenano/issues)
 
-### 再设置语音输入
+## 来源与许可
 
-语音分为“本地语音识别”和“外部语音程序”两条路径。搜狗、微信、豆包和 Chatterfly 仍需按原有方式分别安装、配置；只有本地识别路径不需要这些外部组件。
+由 [WuYuStar](https://github.com/WuYuStar) 基于 [ZSTDJan/windows-remote-mic-app](https://github.com/ZSTDJan/windows-remote-mic-app) 二次开发，Windows 实现源于 [nijez/open-voice-bridge](https://github.com/nijez/open-voice-bridge)。保留原作者版权与署名，按 [GPL-3.0-only](LICENSE.md) 发布。
 
-#### 使用搜狗、微信、豆包或 Chatterfly
-
-**这条路径需要在无线麦和对应输入法两边分别配置，只设置无线麦还不够。**
-
-先完成基础设置：
-
-1. 在“语音”页点击“安装音频”，安装虚拟音频组件 VB-CABLE，**安装完成后先重启电脑**。
-2. 重启后，在无线麦“语音”页选择搜狗、微信、豆包或 Chatterfly。
-3. 在无线麦中，把“输出端点”设为 `CABLE Input`。
-4. 打开对应输入法或 Chatterfly 的设置，把麦克风设为 `CABLE Output`。
-5. 在无线麦中确认“按键模式”：小米只支持按住型，谷歌还支持开关型。
-
-**搜狗、微信和豆包还需要配置语音快捷键：**
-
-1. 在输入法设置中，为所选语音模式设置快捷键。
-2. 让无线麦的“语音按键”与输入法中的设置一致；自动读取失败可手动录入。
-3. 打开记事本，把光标放在文字框里，用电脑键盘测试该快捷键，确认能录音和输入文字。
-
-**豆包更新与兼容性：**
-
-- 豆包更新后，遥控语音可能暂时不可用；部分版本需要无线麦重新适配。
-- 建议关闭豆包自动更新，确认无线麦兼容后再手动更新。
-
-**Chatterfly：**
-
-- 麦克风仍需按上面的基础设置选择 `CABLE Output`。
-- 无线麦直接控制录音，无需靠快捷键启动；界面中的快捷键供键盘对照。
-
-当前1.0.107源码仅保留Fun-ASR-Nano CPU量化本地引擎，支持模型下载进度和商店应用按键启动；旧本地引擎配置自动迁移。本地便携包已生成，公开下载以 Releases 实际附件为准。
-
-#### 使用本地语音识别（1.0.107）
-
-1. 完全退出旧版，将便携 ZIP 完整解压，再打开其中的无线麦程序。
-2. 在“语音”选择“中英混合识别 (Fun-ASR-Nano)”，在“本地模型”准备约1.28GB的模型文件。下载完成后可离线识别。
-3. 光标放到文字框，按住说话、松开识别。无需外部输入法、VB-CABLE或输出端点；Chromecast也可使用开关型。
-
-屏幕底部用无文字波形表示录音、圆环表示识别。模型按需加载并在退出时释放；录音只在内存和本机匿名管道中传递，不上传识别服务，不保存录音文件。取消和焦点变化保护继续生效。旧Whisper/Paraformer/千问配置迁移到Nano，外部输入法不受影响。
-
-按键“打开程序”支持普通EXE文件，也可点“选择应用”选择ChatGPT等商店应用；单击、双击和长按均可配置。详细步骤见[使用说明](apps/windows/rc003/README.md)。
-
-## 界面介绍
-
-| 1. 设备：选择遥控器、查看连接状态 | 2. 谷歌按键映射：设置单击、双击、长按 |
-| --- | --- |
-| ![无线麦设备界面](docs/screenshots/device-overview.jpg) | ![谷歌遥控器按键设置界面](docs/screenshots/google-buttons.jpg) |
-| 3. 小米按键映射：设置单击、双击、长按 | 4. 语音：选择本地识别或外部语音程序 |
-| ![小米遥控器按键设置界面](docs/screenshots/xiaomi-buttons.jpg) | ![无线麦语音界面](docs/screenshots/voice-overview.jpg) |
-
-## 交流与反馈
-
-无线麦 QQ 群：**89641716**
-
-<img src="docs/images/qq-group-89641716.png" alt="无线麦 QQ 群 89641716 二维码" width="320">
-
-<details>
-<summary>开发与技术资料</summary>
-
-Windows 客户端的运行说明见 [开发者文档](apps/windows/rc003/README.md)；从全新源码构建见 [构建说明](BUILDING.md)。
-元素导航的独立项目 OrthoFocus 见 [项目说明](apps/windows/orthofocus/README.md)。
-
-</details>
-
-## 开源与安全
-
-代码按 [GPL-3.0-only](LICENSE.md) 发布；第三方组件和素材按各自的许可与授权使用，见 [第三方说明](THIRD_PARTY_LICENSES/README.md) 和 [素材授权](ASSET_LICENSES.md)。普通问题与建议见 [参与说明](CONTRIBUTING.md)，安全漏洞请通过 [私密报告入口](SECURITY.md) 提交。
+[归属说明](apps/windows/rc003/ATTRIBUTION.md) · [第三方许可](THIRD_PARTY_NOTICES.md) · [素材授权](ASSET_LICENSES.md)
