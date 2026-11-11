@@ -42,41 +42,9 @@ name: windows-rc003-ci
 # app; device-profiles/xiaomi-rc003.json documents the identity/HID facts the
 # Windows adapter's own device_profile.py mirrors), so a change to any of them
 # must re-run this workflow even though none live under apps/windows/rc003/.
+# Uploading code or creating a Release must not start build/test jobs.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - "codex/vibenano-*"
-    tags:
-      - "v[0-9]*.[0-9]*.[0-9]*"
-      - "v*-windows"
-      - "v*-windows-rc003-candidate.*"
-    paths:
-      - "apps/windows/rc003/**"
-      - ".github/workflows/windows-rc003-ci.yml"
-      - "legal/COPYRIGHT.md"
-      - "LICENSE.md"
-      - "legal/THIRD_PARTY_NOTICES.md"
-      - "legal/THIRD_PARTY_SOURCE.md"
-      - "legal/ASSET_LICENSES.md"
-      - "THIRD_PARTY_LICENSES/**"
-      - "Resources/RC003-remote-photo.png"
-      - "device-profiles/xiaomi-rc003.json"
-      - "device-profiles/dji-mic-2.json"
-  pull_request:
-    paths:
-      - "apps/windows/rc003/**"
-      - ".github/workflows/windows-rc003-ci.yml"
-      - "legal/COPYRIGHT.md"
-      - "LICENSE.md"
-      - "legal/THIRD_PARTY_NOTICES.md"
-      - "legal/THIRD_PARTY_SOURCE.md"
-      - "legal/ASSET_LICENSES.md"
-      - "THIRD_PARTY_LICENSES/**"
-      - "Resources/RC003-remote-photo.png"
-      - "device-profiles/xiaomi-rc003.json"
-      - "device-profiles/dji-mic-2.json"
 
 permissions:
   contents: read
