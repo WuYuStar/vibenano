@@ -4,7 +4,7 @@
 
 **[VibeNano 下载页面与说明](https://github.com/WuYuStar/vibenano)** · [VibeNano 版本下载](https://github.com/WuYuStar/vibenano/releases)
 
-**当前源码状态：** 1.0.107 仅保留 Fun-ASR-Nano 本地引擎，旧本地引擎配置自动迁移；按键映射支持选择商店应用。已按用户要求制作本地便携版，公开下载版本保持不变。
+**当前源码状态：** 1.0.108 发布版，软件名称统一为 VibeNano，数据目录改为 `%LOCALAPPDATA%\VibeNano\RC003`。首次启动兼容迁移旧设置与已下载的 Nano 模型；旧目录保留备份。下载见项目首页；1.0.107 历史公开附件不变。
 
 ## 下载与升级
 
@@ -271,3 +271,10 @@ $env:PYTHONPATH = Join-Path $PWD.ProviderPath 'src'
 ## 公开源码与构建
 
 本项目按 GPL-3.0-only 发布，保留上游版权、完整许可及归属记录。新环境先按docs/BUILDING.md 编译 Nano 工作程序，再执行 Windows 构建。版本说明见 release-notes/1.0.107.md。公开1.0.107附件不附带VB-CABLE驱动，外部输入法用户须自行从官网下载安装；原有本机自用包不在本轮替换。
+
+
+### 1.0.108 名称与数据目录
+
+软件显示名、窗口标题和新生成的主程序文件名统一使用VibeNano。正常数据根目录为 `%LOCALAPPDATA%\VibeNano\RC003`，模型位于其 `models\fun-asr-nano\gguf` 子目录。首次启动在取得单实例运行权后导入旧 `RemoteMic\RC003` 的配置、按键和预设，并复用已完成下载的Nano模型；不覆盖新目录已有文件。NTFS同卷模型使用硬链接复用数据，不重复占用一份模型空间。
+
+旧目录保留作为兼容备份；单实例协议、设备身份、共享权限组件及其维护注册仍保留旧内部标识，避免双开、按键配置丢失或旧版误删组件。日志、运行状态和未完成下载不作为设置迁移。此说明属于开发源码，不表示运行中的1.0.107会自动改名。

@@ -12,9 +12,10 @@ from pathlib import Path, PurePath
 from typing import Any
 
 
-DISPLAY_NAME = "无线麦"
+DISPLAY_NAME = "VibeNano"
 WINDOWS_EDITION_NAME = "win版"
 WINDOWS_PRODUCT_NAME = f"{DISPLAY_NAME} {WINDOWS_EDITION_NAME}"
+LEGACY_WINDOWS_PRODUCT_NAME = "无线麦 win版"
 LEGACY_WINDOWS_EXECUTABLE_NAME = "RemoteMicRC003.exe"
 WINDOWS_RUNTIME_DIRECTORY_NAME = "程序文件"
 WINDOWS_DOCUMENTATION_DIRECTORY_NAME = "说明与许可"
@@ -30,7 +31,7 @@ _VERSION_PATTERN = re.compile(
     r"(?:-(?P<suffix>[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*))?"
 )
 _WINDOWS_EXECUTABLE_PATTERN = re.compile(
-    rf"{re.escape(WINDOWS_PRODUCT_NAME)} (?P<version>.+)\.exe",
+    rf"(?:{re.escape(WINDOWS_PRODUCT_NAME)}|{re.escape(LEGACY_WINDOWS_PRODUCT_NAME)}) (?P<version>.+)\.exe",
     re.IGNORECASE,
 )
 _WINDOWS_VERSION_COMPONENT_MAX = 65_535

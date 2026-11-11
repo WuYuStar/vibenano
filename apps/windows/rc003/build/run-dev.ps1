@@ -17,11 +17,7 @@ param(
 $ErrorActionPreference = "Stop"
 $RC003Root = [System.IO.Path]::GetFullPath((Resolve-Path (Join-Path $PSScriptRoot "..")).ProviderPath)
 $VenvPythonw = Join-Path $RC003Root ".venv\Scripts\pythonw.exe"
-$ProductName = -join @(
-    [char]0x65E0,
-    [char]0x7EBF,
-    [char]0x9EA6
-)
+$ProductName = "VibeNano"
 $DevLabel = -join @(
     [char]0x5F00,
     [char]0x53D1,

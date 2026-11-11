@@ -731,7 +731,7 @@ class DesktopModeRoutingTests(_ArgvRestoringTestCase):
         self.assertEqual(len(notice_calls), 1)
         self.assertEqual(
             notice_calls[0],
-            "无线麦已经在启动或运行。\n\n"
+            "VibeNano已经在启动或运行。\n\n"
             "请从通知区域打开现有程序。",
         )
 
@@ -1043,7 +1043,7 @@ class DesktopModeRoutingTests(_ArgvRestoringTestCase):
         maintenance.assert_not_called()
         settings_main.assert_not_called()
         self.assertEqual(len(notices), 1)
-        self.assertIn("无法确认无线麦当前的权限状态", notices[0])
+        self.assertIn("无法确认VibeNano当前的权限状态", notices[0])
         self.assertNotIn("private detail", notices[0])
 
     def test_frozen_desktop_does_not_start_during_installer_maintenance(self):
@@ -1074,7 +1074,7 @@ class DesktopModeRoutingTests(_ArgvRestoringTestCase):
                 main_module.INSTALLER_MAINTENANCE_ACTIVE_EXIT_CODE,
             )
             settings_main.assert_not_called()
-            self.assertEqual(notices, ["无线麦正在安装或卸载。完成后再打开。"])
+            self.assertEqual(notices, ["VibeNano正在安装或卸载。完成后再打开。"])
 
     def test_elevated_frozen_duplicate_only_activates_the_existing_window(self):
         from ovb_rc003 import settings_ui
@@ -2165,7 +2165,7 @@ class ApplicationHandoffTests(unittest.TestCase):
 
         self.assertFalse(main_module._handoff_previous_application())
         self.assertEqual(len(notices), 1)
-        self.assertIn("正在切换无线麦版本", notices[0])
+        self.assertIn("正在切换VibeNano版本", notices[0])
 
     def test_timeout_message_does_not_claim_the_old_copy_exited_when_cleanup_fails(self):
         notices = []

@@ -603,7 +603,7 @@ ApplicationWindow {
                 kind: bodyKind
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: qsTr("移除后，本机所有无线麦版本都不能使用自定义按键映射。")
+                text: qsTr("移除后，本机所有VibeNano版本都不能使用自定义按键映射。")
             }
 
             RowLayout {

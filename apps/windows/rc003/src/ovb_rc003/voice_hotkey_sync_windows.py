@@ -413,7 +413,7 @@ def read_provider_hotkey(
             True,
             "no_hotkey",
             "",
-            "本地语音识别在无线麦内直接识别，不需要语音快捷键。",
+            "本地语音识别在VibeNano内直接识别，不需要语音快捷键。",
         )
     if provider in {
         voice_program_manager.VOICE_PROGRAM_NONE,
@@ -484,14 +484,14 @@ def sync_provider_hotkey(
         voice_program_manager.VOICE_PROGRAM_CUSTOM,
     }:
         if provider == voice_program_manager.VOICE_PROGRAM_WETYPE:
-            message = ("快捷键已保存到无线麦；请确保与微信输入法中的" +
+            message = ("快捷键已保存到VibeNano；请确保与微信输入法中的" +
                        ("启动语音输入" if trigger == "toggle" else "按住型") + "快捷键一致。")
         elif provider == voice_program_manager.VOICE_PROGRAM_DOUBAO_IME:
-            message = "快捷键已保存到无线麦；请确保与豆包输入法中的" + (
+            message = "快捷键已保存到VibeNano；请确保与豆包输入法中的" + (
                 "免按模式" if trigger == "toggle" else "按住型"
             ) + "快捷键一致。"
         elif provider == voice_program_manager.VOICE_PROGRAM_CHATTERFLY:
-            message = "快捷键已保存到无线麦；请确保与 Chatterfly 的语音输入快捷键一致。"
+            message = "快捷键已保存到VibeNano；请确保与 Chatterfly 的语音输入快捷键一致。"
         else:
             message = f"快捷键已保存到{product_identity.DISPLAY_NAME}。"
         return VoiceHotkeySyncResult(
@@ -508,7 +508,7 @@ def sync_provider_hotkey(
     if provider == voice_program_manager.VOICE_PROGRAM_SOGOU:
         if trigger == "toggle":
             return VoiceHotkeySyncResult(provider, True, "local_only", normalized,
-                "开关型快捷键已保存到无线麦；请确保与搜狗的点按开启快捷键一致。")
+                "开关型快捷键已保存到VibeNano；请确保与搜狗的点按开启快捷键一致。")
         return _sync_sogou_hotkey(
             normalized,
             appdata=appdata,
@@ -819,7 +819,7 @@ def _provider_tokens_to_hotkey(raw_tokens: object) -> str:
         token = str(raw_token).strip()
         if token.casefold() == "numpadenter":
             raise ValueError(
-                "无线麦目前不能区分数字键盘 Enter，请在搜狗语音界面换一个快捷键"
+                "VibeNano目前不能区分数字键盘 Enter，请在搜狗语音界面换一个快捷键"
             )
         normalized = _SOGOU_TO_REMOTE_TOKEN.get(token.casefold())
         if normalized is None:

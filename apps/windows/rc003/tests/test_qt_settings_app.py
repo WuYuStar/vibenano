@@ -12379,7 +12379,7 @@ class SettingsShellSourceContractTests(unittest.TestCase):
         self.assertIn("root.flat && root.activeFocus", self.compact_button_qml)
         self.assertIn("自定义按键映射已可用。确认管理员权限，清理旧组件。", self.main_qml)
         self.assertIn('objectName: "removeHidHelperButton"', self.device_qml)
-        self.assertIn("本机所有无线麦版本都不能使用自定义按键映射", self.main_qml)
+        self.assertIn("本机所有VibeNano版本都不能使用自定义按键映射", self.main_qml)
         self.assertIn(
             "SettingsController.feedbackPageIndex === tabBar.currentIndex",
             self.main_qml,
@@ -12644,7 +12644,7 @@ class SettingsShellSourceContractTests(unittest.TestCase):
             "相当于自动点击一次",
             "默认隐藏到通知区域；需要彻底结束时可改为完全退出",
             "登录后自动在后台运行",
-            "打开无线麦后自动连接遥控器",
+            "打开VibeNano后自动连接遥控器",
             "设置右上角关闭按钮的行为",
             "正在检查蓝牙设备",
             "正在检查按键",
@@ -12966,7 +12966,7 @@ class SettingsShellSourceContractTests(unittest.TestCase):
         self.assertNotIn('qsTr("待完成")', self.voice_qml)
         for misleading_claim in (
             "已授权",
-            "无线麦需要管理员权限",
+            "VibeNano需要管理员权限",
             "VB-CABLE 安装成功",
         ):
             self.assertNotIn(misleading_claim, self.voice_qml)
@@ -13782,7 +13782,7 @@ class OffscreenQmlLoadTests(unittest.TestCase):
         self.assertTrue(data["recording_before_stop_completed"])
         self.assertEqual(data["pending_before_stop_completed"], "ctrl+shift+f8")
         self.assertEqual(data["saved_voice_hotkey"], "ctrl+shift+f8")
-        self.assertIn("快捷键已保存到无线麦", data["voice_save_status"])
+        self.assertIn("快捷键已保存到VibeNano", data["voice_save_status"])
         self.assertFalse(data["voice_feedback_on_device"])
         self.assertTrue(data["voice_feedback_on_voice"])
         self.assertTrue(data["mapping_dirty_on_buttons"])

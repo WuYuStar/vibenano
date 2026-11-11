@@ -8478,7 +8478,7 @@ def _load_qt_classes() -> dict:
                 self._set_bridge_restart_recommended(True)
                 self._set_bridge_launch_phase("failed")
                 self._set_launch_status(
-                    "无法清理上次服务状态；请完全退出无线麦后重试。"
+                    "无法清理上次服务状态；请完全退出VibeNano后重试。"
                 )
                 self._schedule_application_exit_poll()
                 return
@@ -9199,7 +9199,7 @@ def _load_qt_classes() -> dict:
             self._application_update_download_path = str(result.path)
             if result.package_kind is application_update.PackageKind.INSTALLER:
                 self._application_update_message = (
-                    "更新包已保存到桌面并通过校验。请先完全退出无线麦，再在文件夹中"
+                    "更新包已保存到桌面并通过校验。请先完全退出VibeNano，再在文件夹中"
                     "手动运行安装器；程序不会自动安装。"
                 )
             else:

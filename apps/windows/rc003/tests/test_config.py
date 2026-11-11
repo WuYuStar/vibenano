@@ -11,7 +11,7 @@ class ConfigRootTests(unittest.TestCase):
     def test_uses_localappdata_when_set(self):
         with mock.patch.dict("os.environ", {"LOCALAPPDATA": "/tmp/fake-appdata"}):
             root = config.config_root()
-        self.assertEqual(root, Path("/tmp/fake-appdata") / "RemoteMic" / "RC003")
+        self.assertEqual(root, Path("/tmp/fake-appdata") / "VibeNano" / "RC003")
 
     def test_falls_back_to_home_without_localappdata(self):
         with mock.patch.dict("os.environ", {}, clear=False):
@@ -19,7 +19,7 @@ class ConfigRootTests(unittest.TestCase):
 
             os.environ.pop("LOCALAPPDATA", None)
             root = config.config_root()
-        self.assertEqual(root, Path.home() / "RemoteMic" / "RC003")
+        self.assertEqual(root, Path.home() / "VibeNano" / "RC003")
 
 
 class DefaultConfigPrivacyTests(unittest.TestCase):

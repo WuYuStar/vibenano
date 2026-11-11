@@ -461,7 +461,7 @@ jobs:
           Copy-Item -Path "installer/readme-portable-rc003.txt" -Destination (Join-Path $documentationDir ([string]$productPresentation.portable_readme_name)) -Force
 
           Assert-RC003PortableStagingRoot -StagingDirectory $stagingDir -ProductPresentation $productPresentation
-          $zipPath = "dist/portable/无线麦-Windows-$version-免安装.zip"
+          $zipPath = "dist/portable/VibeNano-$version-portable-unsigned.zip"
           if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 
           # XRBM-025 RETRY 1 (controller-accepted self-found blocker):

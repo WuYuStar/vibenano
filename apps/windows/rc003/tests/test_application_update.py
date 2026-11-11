@@ -261,15 +261,15 @@ class RepositoryContractTests(unittest.TestCase):
     def test_update_source_is_the_current_public_repository(self):
         self.assertEqual(
             application_update.REPOSITORY_SLUG,
-            "ZSTDJan/windows-remote-mic-app",
+            "WuYuStar/vibenano",
         )
         self.assertEqual(
             application_update.RELEASES_PAGE_URL,
-            "https://github.com/ZSTDJan/windows-remote-mic-app/releases",
+            "https://github.com/WuYuStar/vibenano/releases",
         )
         self.assertEqual(
             application_update.RELEASES_API_URL,
-            "https://api.github.com/repos/ZSTDJan/windows-remote-mic-app/"
+            "https://api.github.com/repos/WuYuStar/vibenano/"
             "releases?per_page=30",
         )
 
@@ -277,7 +277,7 @@ class RepositoryContractTests(unittest.TestCase):
         release, _ = _release_payload("0.2.0-candidate.2")
         release["assets"][0]["browser_download_url"] = release["assets"][0][
             "browser_download_url"
-        ].replace("/ZSTDJan/", "/miaomiaozii/")
+        ].replace("/WuYuStar/", "/miaomiaozii/")
 
         with self.assertRaises(application_update.ApplicationUpdateError) as caught:
             application_update.check_for_update(
@@ -574,7 +574,7 @@ class ReleasePaginationTests(unittest.TestCase):
     def test_unsafe_cross_repository_and_nonsequential_next_links_are_rejected(self):
         unsafe_links = (
             "https://example.invalid/releases?page=2",
-            "http://api.github.com/repos/ZSTDJan/windows-remote-mic-app/releases?page=2",
+            "http://api.github.com/repos/WuYuStar/vibenano/releases?page=2",
             "https://api.github.com/repos/other/other/releases?page=2",
             self.page_url(1), self.page_url(3),
             self.page_url(2) + "&page=2", self.page_url(2) + "&token=secret",
@@ -675,7 +675,7 @@ class PortableOnlyReleaseTests(unittest.TestCase):
     def _payload(self, version="0.2.0-candidate.31", *, chinese=True, bom=False):
         payload, _ = _release_payload(version, tag=f"v{version}")
         name = (
-            f"无线麦-Windows-{version}-免安装.zip" if chinese
+            f"VibeNano-Windows-{version}-免安装.zip" if chinese
             else f"RemoteMicRC003-{version}-portable-unsigned.zip"
         )
         data = b"portable package bytes"
@@ -741,7 +741,7 @@ class PortableOnlyReleaseTests(unittest.TestCase):
             root = Path(directory)
             old = root / "0.2.0-candidate.30"
             old.mkdir()
-            (old / "无线麦-Windows-0.2.0-candidate.30-免安装.zip.part").write_bytes(b"partial")
+            (old / "VibeNano-Windows-0.2.0-candidate.30-免安装.zip.part").write_bytes(b"partial")
             foreign = root / "0.2.0-candidate.29"
             foreign.mkdir()
             (foreign / "个人文件.zip").write_bytes(b"keep")

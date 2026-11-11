@@ -28,8 +28,8 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 
-REPOSITORY_OWNER = "ZSTDJan"
-REPOSITORY_NAME = "windows-remote-mic-app"
+REPOSITORY_OWNER = "WuYuStar"
+REPOSITORY_NAME = "vibenano"
 REPOSITORY_SLUG = f"{REPOSITORY_OWNER}/{REPOSITORY_NAME}"
 RELEASES_PAGE_URL = f"https://github.com/{REPOSITORY_SLUG}/releases"
 RELEASES_API_URL = (
@@ -72,13 +72,13 @@ _VERSION_PATTERN = re.compile(
     r"(?:-candidate(?:\.(?P<candidate>0|[1-9][0-9]*))?)?$"
 )
 _INSTALLER_PATTERN = re.compile(
-    rf"^RemoteMicRC003Setup-(?P<version>{_VERSION_TEXT_PATTERN})-unsigned\.exe$"
+    rf"^(?:VibeNanoSetup|RemoteMicRC003Setup)-(?P<version>{_VERSION_TEXT_PATTERN})-unsigned\.exe$"
 )
 _PORTABLE_PATTERN = re.compile(
-    rf"^RemoteMicRC003-(?P<version>{_VERSION_TEXT_PATTERN})-portable-unsigned\.zip$"
+    rf"^(?:VibeNano|RemoteMicRC003)-(?P<version>{_VERSION_TEXT_PATTERN})-portable-unsigned\.zip$"
 )
 _CHINESE_PORTABLE_PATTERN = re.compile(
-    rf"^无线麦-Windows-(?P<version>{_VERSION_TEXT_PATTERN})-免安装\.zip$"
+    rf"^(?:VibeNano|无线麦)-Windows-(?P<version>{_VERSION_TEXT_PATTERN})-免安装\.zip$"
 )
 _SHA256_PATTERN = re.compile(r"^[0-9a-fA-F]{64}$")
 _MANIFEST_LINE_PATTERN = re.compile(
@@ -325,15 +325,22 @@ def _path_is_link_like(path: Path) -> bool:
 def _owned_download_names(version: ApplicationVersion) -> frozenset[str]:
     installer = f"RemoteMicRC003Setup-{version.text}-unsigned.exe"
     portable = f"RemoteMicRC003-{version.text}-portable-unsigned.zip"
-    chinese_portable = f"无线麦-Windows-{version.text}-免安装.zip"
+    chinese_portable = f"VibeNano-Windows-{version.text}-免安装.zip"
+    branded = f"VibeNano-{version.text}-portable-unsigned.zip"
+    branded_installer = f"VibeNanoSetup-{version.text}-unsigned.exe"
     return frozenset(
         {
+            branded, f"{branded}.part", f"{branded}.part.json",
+            branded_installer, f"{branded_installer}.part", f"{branded_installer}.part.json",
             installer,
             portable,
             f"{installer}.part",
             f"{portable}.part",
             f"{installer}.part.json",
             f"{portable}.part.json",
+            f"无线麦-Windows-{version.text}-免安装.zip",
+            f"无线麦-Windows-{version.text}-免安装.zip.part",
+            f"无线麦-Windows-{version.text}-免安装.zip.part.json",
             chinese_portable,
             f"{chinese_portable}.part",
             f"{chinese_portable}.part.json",
@@ -461,7 +468,7 @@ def _request(url: str, accept: str) -> urllib.request.Request:
         url,
         headers={
             "Accept": accept,
-            "User-Agent": "RemoteMic-RC003-Updater",
+            "User-Agent": "VibeNano-Updater",
             "X-GitHub-Api-Version": "2022-11-28",
         },
         method="GET",

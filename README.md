@@ -1,12 +1,12 @@
 # VibeNano
 
-Windows 蓝牙遥控器语音输入与按键映射工具，支持小米遥控器2 Pro 和图示谷歌 Chromecast 遥控器。应用内名称暂沿用“无线麦”。
+Windows 蓝牙遥控器语音输入与按键映射工具，支持小米遥控器2 Pro 和图示谷歌 Chromecast 遥控器。1.0.108 已统一软件名称和数据目录为 VibeNano，兼容迁移旧配置与已下载模型。
 
 ## 下载
 
-[1.0.107 预发布](https://github.com/WuYuStar/vibenano/releases/tag/v1.0.107) · [版本说明](apps/windows/rc003/release-notes/1.0.107.md)
+[1.0.108](https://github.com/WuYuStar/vibenano/releases/tag/v1.0.108) · [版本说明](apps/windows/rc003/release-notes/1.0.108.md)
 
-完整解压便携 ZIP，再运行其中的 `无线麦 win版 1.0.107.exe`。升级前请从托盘完全退出旧版；当前程序内更新入口沿用上游，升级本分支请从本仓库手动下载。
+完整解压便携 ZIP，再运行其中的 `VibeNano win版 1.0.108.exe`。升级前请从托盘完全退出旧版；首次启动会导入旧设置并复用已下载的 Nano 模型，旧目录保留备份。
 
 ## 主要功能
 
@@ -24,7 +24,7 @@ Windows 蓝牙遥控器语音输入与按键映射工具，支持小米遥控器
 
 按键映射在“按键”页修改；模型下载支持暂停、继续和失败重试。
 
-要求 Windows x64，Nano 需要支持 AVX2/F16C/FMA 的 CPU，主要验证环境为 Windows 11。1.0.107 为预发布，打包后未补做运行测试，具体范围见版本说明。
+要求 Windows x64，Nano 需要支持 AVX2/F16C/FMA 的 CPU，主要验证环境为 Windows 11。1.0.108 已完成针对性检查及打包运行检查，具体范围见版本说明。
 
 [详细使用说明](apps/windows/rc003/README.md) · [源码构建](docs/BUILDING.md) · [问题反馈](https://github.com/WuYuStar/vibenano/issues)
 

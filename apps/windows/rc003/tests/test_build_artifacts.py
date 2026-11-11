@@ -1713,7 +1713,7 @@ class WindowsCiWorkflowTests(unittest.TestCase):
         self.assertIn("Compress-Archive", self.text)
         self.assertIn("Get-FileHash", self.text)
         self.assertIn("SHA256SUMS.txt", self.text)
-        self.assertIn("无线麦-Windows-$version-免安装.zip", self.text)
+        self.assertIn("VibeNano-Windows-$version-免安装.zip", self.text)
 
     def test_portable_zip_stages_license_source_assets_attribution_and_readme(self):
         # XRBM-022 controller pre-review correction: the portable ZIP
@@ -1888,7 +1888,7 @@ class WindowsCiWorkflowTests(unittest.TestCase):
         step = self._package_step_text()
         self.assertNotIn('installerExe', step)
         self.assertNotIn('Get-ChildItem -Path dist/installer', step)
-        self.assertIn('$zipPath = "dist/portable/无线麦-Windows-$version-免安装.zip"', step)
+        self.assertIn('$zipPath = "dist/portable/VibeNano-Windows-$version-免安装.zip"', step)
 
     def test_portable_staging_directory_is_a_single_versioned_top_level_folder(self):
         # Compress-Archive given a bare directory path (not a "/*" content
@@ -2268,7 +2268,7 @@ class BuildProvenanceScriptTests(unittest.TestCase):
 
             build_root = rc003_root / "dist" / "RemoteMicRC003"
             built_files = {
-                build_root / "无线麦 win版 0.0.1-test.exe": b"main",
+                build_root / "VibeNano win版 0.0.1-test.exe": b"main",
                 build_root / "程序文件" / "RemoteMicRC003HidHelper.exe": b"helper",
                 build_root / "程序文件" / "ovb_rc003" / "VERSION": b"0.0.1-test\n",
                 build_root / "程序文件" / "hidden.dat": b"hidden",
@@ -2291,18 +2291,18 @@ class BuildProvenanceScriptTests(unittest.TestCase):
                         {
                             "schema_version": 1,
                             "version": "0.0.1-test",
-                            "presentation_label": "无线麦 win版 0.0.1-test",
-                            "main_executable_name": "无线麦 win版 0.0.1-test.exe",
-                            "main_executable_stem": "无线麦 win版 0.0.1-test",
-                            "portable_folder_name": "无线麦 win版 0.0.1-test",
+                            "presentation_label": "VibeNano win版 0.0.1-test",
+                            "main_executable_name": "VibeNano win版 0.0.1-test.exe",
+                            "main_executable_stem": "VibeNano win版 0.0.1-test",
+                            "portable_folder_name": "VibeNano win版 0.0.1-test",
                             "runtime_directory_name": "程序文件",
                             "documentation_directory_name": "说明与许可",
                             "portable_readme_name": "使用说明.txt",
                             "hid_helper_executable_name": "RemoteMicRC003HidHelper.exe",
-                            "hid_helper_file_description": "无线麦 权限助手",
-                            "main_file_description": "无线麦 win版 0.0.1-test",
-                            "product_name": "无线麦 win版",
-                            "main_original_filename": "无线麦 win版 0.0.1-test.exe",
+                            "hid_helper_file_description": "VibeNano 权限助手",
+                            "main_file_description": "VibeNano win版 0.0.1-test",
+                            "product_name": "VibeNano win版",
+                            "main_original_filename": "VibeNano win版 0.0.1-test.exe",
                             "helper_original_filename": "RemoteMicRC003HidHelper.exe",
                         },
                         ensure_ascii=True,
@@ -2436,18 +2436,18 @@ class WindowsPowerShellBuildContractTests(unittest.TestCase):
     _presentation = {
         "schema_version": 1,
         "version": "0.0.1-test",
-        "presentation_label": "无线麦 win版 0.0.1-test",
-        "main_executable_name": "无线麦 win版 0.0.1-test.exe",
-        "main_executable_stem": "无线麦 win版 0.0.1-test",
-        "portable_folder_name": "无线麦 win版 0.0.1-test",
+        "presentation_label": "VibeNano win版 0.0.1-test",
+        "main_executable_name": "VibeNano win版 0.0.1-test.exe",
+        "main_executable_stem": "VibeNano win版 0.0.1-test",
+        "portable_folder_name": "VibeNano win版 0.0.1-test",
         "runtime_directory_name": "程序文件",
         "documentation_directory_name": "说明与许可",
         "portable_readme_name": "使用说明.txt",
         "hid_helper_executable_name": "RemoteMicRC003HidHelper.exe",
-        "hid_helper_file_description": "无线麦 权限助手",
-        "main_file_description": "无线麦 win版 0.0.1-test",
-        "product_name": "无线麦 win版",
-        "main_original_filename": "无线麦 win版 0.0.1-test.exe",
+        "hid_helper_file_description": "VibeNano 权限助手",
+        "main_file_description": "VibeNano win版 0.0.1-test",
+        "product_name": "VibeNano win版",
+        "main_original_filename": "VibeNano win版 0.0.1-test.exe",
         "helper_original_filename": "RemoteMicRC003HidHelper.exe",
     }
 
@@ -3060,7 +3060,7 @@ class UserFacingDocumentationContractTests(unittest.TestCase):
             self.assertIn("CABLE Input", text)
             self.assertIn("CABLE Output", text)
             self.assertIn("记事本", text)
-        self.assertIn("无线麦写入声音的一侧", self.guide)
+        self.assertIn("VibeNano写入声音的一侧", self.guide)
         self.assertIn("输入法读取麦克风的一侧", self.guide)
         for provider in ("搜狗", "微信", "豆包"):
             self.assertIn(provider, self.guide)
@@ -3079,7 +3079,7 @@ class UserFacingDocumentationContractTests(unittest.TestCase):
         version = _formal_version_from_landing(self.landing)
         self.assertIn(f"当前正式版为 **{version}**", self.landing)
         self.assertIn(f"RemoteMicRC003-{version}-portable-unsigned.zip", self.landing)
-        self.assertIn("无线麦 win版 <版本号>.exe", self.landing)
+        self.assertIn("VibeNano win版 <版本号>.exe", self.landing)
 
 
 class RootDocumentConsistencyTests(unittest.TestCase):
@@ -3201,7 +3201,7 @@ class PortableReleasePackagingReplayTests(unittest.TestCase):
         script = "\n".join(line[10:] for line in text[start:end].splitlines())
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            name = "无线麦-Windows-0.2.0-candidate.31-免安装.zip"
+            name = "VibeNano-Windows-0.2.0-candidate.31-免安装.zip"
             package = root / name
             package.write_bytes(b"synthetic ZIP for packaging-only verification")
             release = root / "apps/windows/rc003/dist/release"
@@ -3275,7 +3275,7 @@ class PortableAndInstallerFlowContractTests(unittest.TestCase):
     def test_portable_start_and_exit_are_usable(self):
         guide = _README_PATH.read_text(encoding="utf-8")
         self.assertIn("免安装 ZIP", guide)
-        self.assertIn("文件夹顶层的无线麦 EXE", guide)
+        self.assertIn("文件夹顶层的VibeNano EXE", guide)
         self.assertIn("不要只把 EXE 单独取出来", _normalize_whitespace(guide))
         self.assertIn("通知区域", guide)
         self.assertIn("完全退出", guide)

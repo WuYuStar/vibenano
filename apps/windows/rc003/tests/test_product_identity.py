@@ -24,15 +24,15 @@ class ProductIdentityTests(unittest.TestCase):
         version = "1.0.51-candidate.51"
         self.assertEqual(
             product_identity.windows_presentation_label(version),
-            "无线麦 win版 1.0.51-candidate.51",
+            "VibeNano win版 1.0.51-candidate.51",
         )
         self.assertEqual(
             product_identity.windows_executable_name(version),
-            "无线麦 win版 1.0.51-candidate.51.exe",
+            "VibeNano win版 1.0.51-candidate.51.exe",
         )
         self.assertEqual(
             product_identity.windows_portable_folder_name(version),
-            "无线麦 win版 1.0.51-candidate.51",
+            "VibeNano win版 1.0.51-candidate.51",
         )
         self.assertEqual(
             product_identity.windows_fixed_file_version(version),
@@ -44,9 +44,10 @@ class ProductIdentityTests(unittest.TestCase):
         cases = {
             "RemoteMicRC003.exe": "legacy",
             "REMOTEMICRC003.EXE": "legacy",
-            "无线麦 win版 1.0.51-candidate.51.exe": "current",
-            "无线麦 WIN版 1.0.51-candidate.51.EXE": "current",
-            "无线麦 win版 1.0.51.exe": "current",
+            "无线麦 win版 1.0.107.exe": "current",
+            "VibeNano win版 1.0.51-candidate.51.exe": "current",
+            "VibeNano WIN版 1.0.51-candidate.51.EXE": "current",
+            "VibeNano win版 1.0.51.exe": "current",
         }
         for name, layout in cases.items():
             with self.subTest(name=name):
@@ -57,13 +58,13 @@ class ProductIdentityTests(unittest.TestCase):
 
         for name in (
             "RemoteMicRC003-old.exe",
-            "无线麦 win版.exe",
-            "无线麦 win版 1.0.exe",
-            "无线麦 win版 01.0.51.exe",
-            "无线麦 win版 1.0.51-.exe",
-            "C:\\Apps\\无线麦 win版 1.0.51.exe",
-            "..\\无线麦 win版 1.0.51.exe",
-            "无线麦 win版 1.0.51.exe.bak",
+            "VibeNano win版.exe",
+            "VibeNano win版 1.0.exe",
+            "VibeNano win版 01.0.51.exe",
+            "VibeNano win版 1.0.51-.exe",
+            "C:\\Apps\\VibeNano win版 1.0.51.exe",
+            "..\\VibeNano win版 1.0.51.exe",
+            "VibeNano win版 1.0.51.exe.bak",
         ):
             with self.subTest(name=name):
                 self.assertIsNone(
@@ -78,7 +79,7 @@ class ProductIdentityTests(unittest.TestCase):
         )
         self.assertEqual(
             product_identity.windows_runtime_relative_directory_for_executable(
-                "无线麦 win版 1.0.51-candidate.51.exe"
+                "VibeNano win版 1.0.51-candidate.51.exe"
             ),
             Path("程序文件"),
         )
@@ -132,26 +133,26 @@ class ProductIdentityTests(unittest.TestCase):
         helper = product_identity.windows_hid_helper_version_metadata(
             "1.0.51-candidate.51"
         )
-        self.assertEqual(main["file_description"], "无线麦 win版 1.0.51-candidate.51")
-        self.assertEqual(main["original_filename"], "无线麦 win版 1.0.51-candidate.51.exe")
+        self.assertEqual(main["file_description"], "VibeNano win版 1.0.51-candidate.51")
+        self.assertEqual(main["original_filename"], "VibeNano win版 1.0.51-candidate.51.exe")
         self.assertEqual(main["internal_name"], "RemoteMicRC003")
-        self.assertEqual(helper["file_description"], "无线麦 权限助手")
+        self.assertEqual(helper["file_description"], "VibeNano 权限助手")
         self.assertEqual(helper["original_filename"], "RemoteMicRC003HidHelper.exe")
         self.assertTrue(main["prerelease"])
 
     def test_user_visible_name_has_one_runtime_source(self):
-        self.assertEqual(product_identity.DISPLAY_NAME, "无线麦")
+        self.assertEqual(product_identity.DISPLAY_NAME, "VibeNano")
         self.assertEqual(
             settings_ui._action_to_display(
                 key_mapping.ButtonAction(key_mapping.ActionKind.OPEN_REMOTE_MIC)
             ),
-            "打开无线麦",
+            "打开VibeNano",
         )
 
         tooltip_default = inspect.signature(
             bridge_tray_windows.BridgeTray
         ).parameters["tooltip"].default
-        self.assertEqual(tooltip_default, "无线麦 · 小米遥控器2 Pro")
+        self.assertEqual(tooltip_default, "VibeNano · 小米遥控器2 Pro")
 
     def test_voice_statuses_use_the_display_name(self):
         read_result = voice_hotkey_sync_windows.read_provider_hotkey(
@@ -225,8 +226,8 @@ class ProductIdentityTests(unittest.TestCase):
         installer = (
             _RC003_ROOT / "installer" / "RemoteMicRC003Setup.iss"
         ).read_text(encoding="utf-8")
-        self.assertIn('#define AppName "无线麦"', installer)
-        self.assertIn("DefaultGroupName=无线麦", installer)
+        self.assertIn('#define AppName "VibeNano"', installer)
+        self.assertIn("DefaultGroupName=VibeNano", installer)
         self.assertIn("UsePreviousGroup=no", installer)
         self.assertNotIn("[InstallDelete]", installer)
         cleanup_start = installer.index("procedure DeleteObsoleteShortcuts;")
@@ -271,16 +272,15 @@ class ProductIdentityTests(unittest.TestCase):
         self.assertLess(commit, files_completed)
         self.assertLess(files_completed, cleanup_call)
         self.assertLess(cleanup_call, helper_install)
-        self.assertIn('#define AppExeName "RemoteMicRC003.exe"', installer)
-        self.assertIn("DefaultDirName={localappdata}\\RemoteMic\\{#AppFolder}", installer)
+        self.assertIn('#define AppExeName AppName + " win版 " + AppVersion + ".exe"', installer)
+        self.assertIn("DefaultDirName={localappdata}\\VibeNano\\{#AppFolder}", installer)
         self.assertIn("'RemoteMicRC003'", installer)
 
     def test_development_shortcut_uses_new_name_and_validates_legacy_owner(self):
         script = (
             _RC003_ROOT / "build" / "install-dev-shortcut.ps1"
         ).read_text(encoding="utf-8")
-        for codepoint in ("0x65E0", "0x7EBF", "0x9EA6"):
-            self.assertIn(codepoint, script)
+        self.assertIn('$ProductName = "VibeNano"', script)
         self.assertIn("LegacyMatchesThisCheckout", script)
         self.assertIn("WorkingDirectory", script)
         self.assertIn("$LegacyShortcut.Arguments -eq $ShortcutArguments", script)

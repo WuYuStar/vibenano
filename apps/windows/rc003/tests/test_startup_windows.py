@@ -54,14 +54,14 @@ class StartupWindowsTests(unittest.TestCase):
             startup_windows.build_startup_command(
                 frozen=True,
                 executable=(
-                    r"C:\无线麦 测试\无线麦 win版 "
+                    r"C:\VibeNano 测试\VibeNano win版 "
                     r"1.0.51-candidate.51.exe"
                 ),
             )
         )
         self.assertEqual(
             command,
-            '"C:\\无线麦 测试\\无线麦 win版 1.0.51-candidate.51.exe" --background',
+            '"C:\\VibeNano 测试\\VibeNano win版 1.0.51-candidate.51.exe" --background',
         )
 
     def test_frozen_command_uses_background_shell(self):
@@ -130,21 +130,21 @@ class StartupWindowsTests(unittest.TestCase):
 
     def test_rebind_owned_frozen_startup_moves_old_portable_command_to_current_path(self):
         old_command = startup_windows.command_line(
-            [r"D:\旧版 无线麦\RemoteMicRC003.exe", "--background"]
+            [r"D:\旧版 VibeNano\RemoteMicRC003.exe", "--background"]
         )
         current_command = startup_windows.command_line(
-            [r"E:\新版 无线麦\RemoteMicRC003.exe", "--background"]
+            [r"E:\新版 VibeNano\RemoteMicRC003.exe", "--background"]
         )
         registry = _FakeWinreg(old_command)
 
         state = startup_windows.rebind_owned_frozen_startup(
             platform="win32",
             frozen=True,
-            executable=r"E:\新版 无线麦\RemoteMicRC003.exe",
+            executable=r"E:\新版 VibeNano\RemoteMicRC003.exe",
             current_command=current_command,
             winreg_module=registry,
             command_parser=lambda _value: [
-                r"D:\旧版 无线麦\RemoteMicRC003.exe",
+                r"D:\旧版 VibeNano\RemoteMicRC003.exe",
                 "--background",
             ],
         )
@@ -157,7 +157,7 @@ class StartupWindowsTests(unittest.TestCase):
     def test_rebind_owned_frozen_startup_migrates_legacy_to_versioned_name(self):
         old_executable = r"D:\旧版\RemoteMicRC003.exe"
         new_executable = (
-            r"E:\新版 无线麦\无线麦 win版 1.0.51-candidate.51.exe"
+            r"E:\新版 VibeNano\VibeNano win版 1.0.51-candidate.51.exe"
         )
         old_command = startup_windows.command_line(
             [old_executable, "--background"]
@@ -179,8 +179,8 @@ class StartupWindowsTests(unittest.TestCase):
         )
 
     def test_rebind_owned_frozen_startup_migrates_between_versioned_names(self):
-        old_executable = r"D:\旧版\无线麦 win版 1.0.50-candidate.50.exe"
-        new_executable = r"E:\新版\无线麦 win版 1.0.51-candidate.51.exe"
+        old_executable = r"D:\旧版\VibeNano win版 1.0.50-candidate.50.exe"
+        new_executable = r"E:\新版\VibeNano win版 1.0.51-candidate.51.exe"
         old_command = startup_windows.command_line(
             [old_executable, "--background"]
         )
@@ -209,7 +209,7 @@ class StartupWindowsTests(unittest.TestCase):
         state = startup_windows.rebind_owned_frozen_startup(
             platform="win32",
             frozen=True,
-            executable=r"E:\新版\无线麦.exe",
+            executable=r"E:\新版\VibeNano.exe",
             winreg_module=registry,
             command_parser=lambda _value: self.fail("parser should not run"),
         )

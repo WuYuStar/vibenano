@@ -1,6 +1,6 @@
 """Configuration persistence with an enforced privacy contract.
 
-Config root: ``%LOCALAPPDATA%\\RemoteMic\\RC003`` (falls back to the
+Config root: ``%LOCALAPPDATA%\\VibeNano\\RC003`` (falls back to the
 user's home directory if ``LOCALAPPDATA`` is unset, e.g. when unit testing on
 non-Windows). Two JSON files live there: ``config.json`` (tuning/behavior) and
 ``key_bindings.json`` (per-button actions plus the voice hotkey).
@@ -26,7 +26,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
-APP_ID = "RemoteMic"
+APP_ID = "VibeNano"
+LEGACY_APP_ID = "RemoteMic"
 PRODUCT_ID = "RC003"
 
 CONFIG_FILENAME = "config.json"
@@ -143,6 +144,33 @@ def config_root() -> Path:
     if not base:
         base = str(Path.home())
     return Path(base) / APP_ID / PRODUCT_ID
+
+
+def legacy_config_root() -> Path:
+    """Compatibility location; never rename a live legacy installation."""
+    from . import dev_session
+    if dev_session.is_isolated():
+        return dev_session.isolated_root()
+    return Path(os.environ.get("LOCALAPPDATA") or str(Path.home())) / LEGACY_APP_ID / PRODUCT_ID
+
+
+def control_root() -> Path:
+    """Before first migration, an older resident app still reads its old IPC files."""
+    from . import data_migration, dev_session
+    root = config_root()
+    if not dev_session.is_isolated() and not data_migration.completed(root):
+        legacy = legacy_config_root()
+        if legacy.is_dir():
+            return legacy
+    return root
+
+
+def migrate_legacy_data() -> Path:
+    from . import data_migration, dev_session
+    root = config_root()
+    if not dev_session.is_isolated():
+        data_migration.migrate(legacy_config_root(), root)
+    return root
 
 
 def config_path(root: Path = None) -> Path:  # type: ignore[assignment]
@@ -1113,7 +1141,7 @@ def _without_runtime_only_keys(data: Dict[str, Any]) -> Dict[str, Any]:
 
 def _assert_settings_writable(data: dict) -> None:
     if data.get(RUNTIME_READ_ONLY_KEY):
-        raise ConfigReadOnlyError("配置读取异常，原文件已保留；修复后请重新打开无线麦。")
+        raise ConfigReadOnlyError("配置读取异常，原文件已保留；修复后请重新打开VibeNano。")
 
 
 def _save_bytes_atomic(path: Path, content: bytes) -> None:

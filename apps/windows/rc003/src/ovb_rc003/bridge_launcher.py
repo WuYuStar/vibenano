@@ -25,7 +25,7 @@ SETTINGS_LAUNCH_FLAG = "--bridge-from-settings"
 
 DEFAULT_GRACE_CHECKS = 10
 DEFAULT_POLL_INTERVAL_SECONDS = 0.15
-CLEANUP_FAILED_TEXT = "上次服务未清理完成，请从通知区域完全退出无线麦后重新打开。"
+CLEANUP_FAILED_TEXT = "上次服务未清理完成，请从通知区域完全退出VibeNano后重新打开。"
 
 
 class BridgeLaunchConfigurationError(Exception):

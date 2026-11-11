@@ -164,7 +164,7 @@ def observe(allowed: set[int], seconds: int, writer: _EvidenceWriter) -> str:
 
 
 def main(args: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="限时只读接收采集，不启动无线麦服务；不记录文本。")
+    parser = argparse.ArgumentParser(description="限时只读接收采集，不启动VibeNano服务；不记录文本。")
     parser.add_argument("--keys", required=True, help="需要对照的键，例如 ralt+i；始终包括修饰键")
     parser.add_argument("--seconds", type=int, default=30)
     parser.add_argument("--output", required=True, type=Path, help="不存在的绝对 JSONL 文件路径")

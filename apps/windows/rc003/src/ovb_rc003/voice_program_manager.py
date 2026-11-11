@@ -337,7 +337,7 @@ def launch_result_text(result: VoiceProgramLaunchResult) -> str:
         result.provider_id in LOCAL_VOICE_PROVIDERS
         and result.code == "built_in_adapter"
     ):
-        return "本地语音识别由无线麦内置提供，不需要单独启动。"
+        return "本地语音识别由VibeNano内置提供，不需要单独启动。"
     if result.provider_id == VOICE_PROGRAM_SOGOU:
         sogou_messages = {
             "not_found": "未找到搜狗语音程序，请先安装或手动启动。",
@@ -369,7 +369,7 @@ def launch_result_text(result: VoiceProgramLaunchResult) -> str:
         "system_managed": (
             f"该语音程序由 Windows 管理，{product_identity.DISPLAY_NAME}不单独启动它。"
         ),
-        "built_in_adapter": "该输入法由无线麦直接适配，不需要单独启动。",
+        "built_in_adapter": "该输入法由VibeNano直接适配，不需要单独启动。",
     }
     return messages.get(result.code, "语音程序状态未知。")
 

@@ -46,12 +46,8 @@ def _remote_mic_quicker_state_file() -> str:
     local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
     if not local_app_data:
         return ""
-    return os.path.join(
-        local_app_data,
-        "RemoteMic",
-        "RC003",
-        "quicker-navigation.json",
-    )
+    from . import config
+    return str(config.config_root() / "quicker-navigation.json")
 
 
 class CommandSendResult(Enum):

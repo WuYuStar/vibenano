@@ -33,7 +33,7 @@ _EXCLUDED_DIR_NAMES = {
     "pyinstaller-work",
     "third_party",
 }
-_EXCLUDED_ROOT_FILE_PATTERNS = ("无线麦便携测试包-*.zip",)
+_EXCLUDED_ROOT_FILE_PATTERNS = ("VibeNano便携测试包-*.zip",)
 
 
 def _is_excluded_generated_path(path: Path, root: Path) -> bool:
@@ -395,7 +395,7 @@ class BoundaryScanReplayTests(unittest.TestCase):
                 root / "build" / "smoke-dist-c23" / "RemoteMicRC003.exe",
                 root / "build" / "smoke-work-c23" / "analysis.pyd",
                 root / "build" / "ui-audit-c23" / "settings.png.exe",
-                root / "无线麦便携测试包-022.zip",
+                root / "VibeNano便携测试包-022.zip",
             ]
             for generated_path in generated_paths:
                 generated_path.parent.mkdir(parents=True, exist_ok=True)

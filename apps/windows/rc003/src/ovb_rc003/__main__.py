@@ -365,7 +365,7 @@ def _request_application_exit(
 
     from . import config, single_instance
 
-    root = config.config_root()
+    root = config.control_root()
     request_guard = single_instance.ApplicationExitRequestGuard()
     request_guard_entered = False
     request_id: str | None = None
@@ -539,7 +539,7 @@ def _handoff_previous_application(
         handoff_guard.__enter__()
     except single_instance.DuplicateInstanceError:
         single_instance.show_bridge_startup_blocked_notice(
-            "正在切换无线麦版本，请稍候。\n\n"
+            "正在切换VibeNano版本，请稍候。\n\n"
             "如果一直没有完成，请从旧版通知区域选择“完全退出”。"
         )
         return False
@@ -604,7 +604,7 @@ def _handoff_previous_application(
         ):
             return False
 
-        root = config.config_root()
+        root = config.control_root()
         exit_request_guard = single_instance.ApplicationExitRequestGuard()
         exit_request_guard_entered = False
         if request_capable:
@@ -988,7 +988,7 @@ def _migrate_legacy_bridge_before_desktop_start() -> bool:
             # status is claimed and removed. A bridge that restarts during the
             # handoff wins the mutex and blocks this copy instead.
             with single_instance.BridgeInstanceGuard():
-                config_root = config.config_root()
+                config_root = config.control_root()
                 bridge_runtime_status.clear_status(config_root)
                 if bridge_runtime_status.read_status(config_root) is not None:
                     raise OSError("bridge runtime status remained after cleanup")
@@ -1045,7 +1045,7 @@ def _migrate_legacy_bridge_before_desktop_start() -> bool:
     single_instance.show_bridge_startup_blocked_notice(
         "旧版遥控器服务仍在运行，当前版本没有打开。\n\n"
         "请从旧版通知区域选择“完全退出”；看不到图标时，"
-        "请在任务管理器结束旧版无线麦后重试。"
+        "请在任务管理器结束旧版VibeNano后重试。"
     )
     raise SystemExit(LEGACY_BRIDGE_STARTUP_BLOCKED_EXIT_CODE)
 
@@ -1056,7 +1056,7 @@ def _run_settings(
     start_bridge: bool = False,
     activate_duplicate: bool = True,
 ) -> None:
-    from . import hid_elevation_windows, settings_ui, single_instance
+    from . import config, hid_elevation_windows, settings_ui, single_instance
 
     if dev_session.is_isolated():
         _run_isolated_settings()
@@ -1068,7 +1068,7 @@ def _run_settings(
             hid_elevation_windows.query_process_elevated()
         except Exception:  # noqa: BLE001 - the desktop startup must fail closed
             single_instance.show_bridge_startup_blocked_notice(
-                "无法确认无线麦当前的权限状态。\n\n"
+                "无法确认VibeNano当前的权限状态。\n\n"
                 "请关闭程序后重新普通双击打开。"
             )
             raise SystemExit(DESKTOP_PERMISSION_UNAVAILABLE_EXIT_CODE)
@@ -1085,7 +1085,7 @@ def _run_settings(
         if maintenance_active:
             if not start_hidden:
                 single_instance.show_bridge_startup_blocked_notice(
-                    "无线麦正在安装或卸载。完成后再打开。"
+                    "VibeNano正在安装或卸载。完成后再打开。"
                 )
             raise SystemExit(INSTALLER_MAINTENANCE_ACTIVE_EXIT_CODE)
 
@@ -1094,6 +1094,7 @@ def _run_settings(
             migrate_legacy_bridge = (
                 _migrate_legacy_bridge_before_desktop_start()
             )
+            config.migrate_legacy_data()
             _register_current_hid_helper_consumer()
             effective_start_bridge = start_bridge or migrate_legacy_bridge
             if start_hidden:
@@ -1146,7 +1147,7 @@ def _run_settings(
                 except single_instance.DuplicateInstanceError:
                     single_instance.activate_existing_settings_window()
                     single_instance.show_bridge_startup_blocked_notice(
-                        "旧版退出后，另一个无线麦副本先取得了运行权。"
+                        "旧版退出后，另一个VibeNano副本先取得了运行权。"
                         "当前副本没有继续启动，请使用已经打开的窗口。"
                     )
     except single_instance.DuplicateInstanceError:
@@ -1177,7 +1178,7 @@ def _run_isolated_settings() -> None:
             settings_ui.main(start_bridge=False)
     except single_instance.DuplicateInstanceError:
         single_instance.show_bridge_startup_blocked_notice(
-            "隔离测试没有启动。请先从通知区域完全退出正在运行的无线麦，再打开测试版。"
+            "隔离测试没有启动。请先从通知区域完全退出正在运行的VibeNano，再打开测试版。"
         )
         raise SystemExit(single_instance.DUPLICATE_INSTANCE_EXIT_CODE)
     except Exception as exc:

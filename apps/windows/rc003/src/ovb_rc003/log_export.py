@@ -26,7 +26,7 @@ class ExportResult:
 
 
 def default_filename() -> str:
-    return datetime.now().strftime('无线麦日志-%Y%m%d-%H%M%S.zip')
+    return datetime.now().strftime('VibeNano日志-%Y%m%d-%H%M%S.zip')
 
 
 def _log_names() -> tuple[str, ...]:
