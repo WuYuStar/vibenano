@@ -4,7 +4,7 @@ Windows 蓝牙遥控器语音输入与按键映射工具，支持小米遥控器
 
 ## 下载
 
-[1.0.109](https://github.com/WuYuStar/vibenano/releases/tag/v1.0.109) · [版本说明](apps/windows/rc003/release-notes/1.0.109.md)
+[1.0.109](https://github.com/WuYuStar/vibenano/releases/tag/v1.0.109) · [便携 ZIP](https://github.com/WuYuStar/vibenano/releases/download/v1.0.109/VibeNano-1.0.109-portable-unsigned.zip) · [SHA256SUMS.txt](https://github.com/WuYuStar/vibenano/releases/download/v1.0.109/SHA256SUMS.txt) · [版本说明](apps/windows/rc003/release-notes/1.0.109.md)
 
 完整解压便携 ZIP，再运行其中的 `VibeNano win版 1.0.109.exe`。升级前请从托盘完全退出旧版；首次启动会导入旧设置并复用已下载的 Nano 模型。
 

@@ -177,6 +177,31 @@ class LoggingEfficiencyTests(unittest.TestCase):
             self.assertIn('message 99', path.read_text())
             path.unlink()
 
+    @unittest.skipUnless(__import__("os").name == "nt", "Windows 8.3 path aliases")
+    def test_short_path_handler_failure_is_visible_to_long_path_export(self):
+        import ctypes
+        from ctypes import wintypes
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "logs").mkdir()
+            get_short = ctypes.WinDLL("kernel32", use_last_error=True).GetShortPathNameW
+            get_short.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+            get_short.restype = wintypes.DWORD
+            buffer = ctypes.create_unicode_buffer(32768)
+            if not get_short(str(root), buffer, len(buffer)):
+                self.skipTest("8.3 paths unavailable on this volume")
+            alias = Path(buffer.value)
+            if str(alias).casefold() == str(root).casefold():
+                self.skipTest("volume does not generate an 8.3 alias")
+            handler = logging_setup.EvidenceFileHandler(alias / "logs/app.log", asynchronous=True)
+            try:
+                with mock.patch.object(handler, "_emit_record", side_effect=OSError("disk unavailable")):
+                    handler.handle(record("cannot write"))
+                    self.assertFalse(handler.flush_pending())
+                self.assertFalse(logging_setup.flush_application_logs((root / "logs").resolve()))
+            finally:
+                handler.close()
+
     def test_application_write_failure_is_visible_to_export(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

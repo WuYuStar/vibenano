@@ -488,6 +488,18 @@ class SettingsControllerTests(unittest.TestCase):
             return_value=True,
         )
         self._hid_helper_self_elevate_patch.start()
+        # GitHub Windows runners run elevated; test the ordinary-user UI by
+        # default and let elevation-specific tests override this explicitly.
+        process_elevated = mock.patch.object(
+            qt_settings_app.hid_elevation_windows, "is_process_elevated", return_value=False
+        )
+        process_elevated.start()
+        self.addCleanup(process_elevated.stop)
+        logger = logging.getLogger(qt_settings_app.logging_setup.LOGGER_NAME)
+        for handler in list(logger.handlers):
+            handler.close()
+            logger.removeHandler(handler)
+        qt_settings_app.logging_setup._configured = False
         self._hid_helper_consumer_patch = mock.patch.object(
             qt_settings_app.hid_helper_consumers,
             "current_consumer_is_registered",
@@ -1638,7 +1650,7 @@ class SettingsControllerTests(unittest.TestCase):
             controller.setDiagnosticTraceEnabled(True)
         controller.setCloseBehaviorIndex(1)
 
-        saved = config.load_config(config.config_path(Path(self._tmpdir.name) / "RemoteMic" / "RC003"))
+        saved = config.load_config(config.config_path(Path(self._tmpdir.name) / "VibeNano" / "RC003"))
         self.assertTrue(saved["launch_bridge_on_app_start"])
         self.assertTrue(saved["diagnostic_trace_enabled"])
         self.assertEqual(saved["close_behavior"], "quit")
@@ -10039,6 +10051,10 @@ DiagnosticsController = classes["DiagnosticsController"]
 QQuickStyle.setStyle("Basic")
 app = QGuiApplication.instance() or QGuiApplication([])
 m.single_instance.bridge_instance_running = lambda: False
+# Layout uses a synthetic endpoint, independent of runner audio hardware.
+m.audio_output.enumerate_output_endpoints = lambda: [
+    m.audio_output.AudioEndpoint("CABLE Input (VB-Audio Virtual Cable)", "Windows WASAPI")
+]
 model = ButtonMappingModel()
 controller = SettingsController(model)
 diagnostics_controller = DiagnosticsController(controller, m.config.config_root())
@@ -10291,6 +10307,10 @@ DiagnosticsController = classes["DiagnosticsController"]
 
 QQuickStyle.setStyle("FluentWinUI3")
 app = QGuiApplication.instance() or QGuiApplication([])
+# Layout uses a synthetic endpoint, independent of runner audio hardware.
+m.audio_output.enumerate_output_endpoints = lambda: [
+    m.audio_output.AudioEndpoint("CABLE Input (VB-Audio Virtual Cable)", "Windows WASAPI")
+]
 model = ButtonMappingModel()
 controller = SettingsController(model)
 diagnostics_controller = DiagnosticsController(controller, m.config.config_root())
@@ -11287,6 +11307,10 @@ QQuickStyle.setStyle(os.environ.get("PROBE_STYLE", "Basic"))
 app = QGuiApplication.instance() or QGuiApplication([])
 bridge_state = {"running": False}
 m.single_instance.bridge_instance_running = lambda: bridge_state["running"]
+# Layout uses a synthetic endpoint, independent of runner audio hardware.
+m.audio_output.enumerate_output_endpoints = lambda: [
+    m.audio_output.AudioEndpoint("CABLE Input (VB-Audio Virtual Cable)", "Windows WASAPI")
+]
 model = ButtonMappingModel()
 controller = SettingsController(model)
 diagnostics_controller = DiagnosticsController(controller, m.config.config_root())
@@ -11599,6 +11623,10 @@ DiagnosticsController = classes["DiagnosticsController"]
 
 QQuickStyle.setStyle("Basic")
 app = QGuiApplication.instance() or QGuiApplication([])
+# Layout uses a synthetic endpoint, independent of runner audio hardware.
+m.audio_output.enumerate_output_endpoints = lambda: [
+    m.audio_output.AudioEndpoint("CABLE Input (VB-Audio Virtual Cable)", "Windows WASAPI")
+]
 model = ButtonMappingModel()
 controller = SettingsController(model)
 diagnostics_controller = DiagnosticsController(controller, m.config.config_root())
@@ -12000,6 +12028,10 @@ m.single_instance.bridge_instance_running = lambda: False
 m.windows_diagnostics.run_diagnostics = lambda **_kwargs: (
     m.windows_diagnostics.DiagnosticsReport(checks=())
 )
+# Layout uses a synthetic endpoint, independent of runner audio hardware.
+m.audio_output.enumerate_output_endpoints = lambda: [
+    m.audio_output.AudioEndpoint("CABLE Input (VB-Audio Virtual Cable)", "Windows WASAPI")
+]
 model = ButtonMappingModel()
 controller = SettingsController(model)
 diagnostics_controller = DiagnosticsController(controller, m.config.config_root())
@@ -13432,7 +13464,7 @@ class ThreePageSettingsSourceContractTests(unittest.TestCase):
         self.assertIn("visible: !SettingsController.isRc003Device", recording_block)
         self.assertNotIn("visible: !root.localSpeechSelected", recording_block)
 
-        controller_source = Path(qt_settings_app.__file__).read_text(encoding="utf-8")
+        controller_source = (Path(__file__).resolve().parents[1] / "src/ovb_rc003/qt_settings_app.py").read_text(encoding="utf-8")
         self.assertIn("validate_voice_hotkeys=not local_voice_provider", controller_source)
         self.assertIn("and not local_voice_provider", controller_source)
         self.assertIn('voice_program_manager.VOICE_PROGRAM_FASTER_WHISPER,', controller_source)
@@ -15025,6 +15057,10 @@ DiagnosticsController = classes["DiagnosticsController"]
 
 QQuickStyle.setStyle("Basic")
 app = QGuiApplication.instance() or QGuiApplication([])
+# Layout uses a synthetic endpoint, independent of runner audio hardware.
+m.audio_output.enumerate_output_endpoints = lambda: [
+    m.audio_output.AudioEndpoint("CABLE Input (VB-Audio Virtual Cable)", "Windows WASAPI")
+]
 model = ButtonMappingModel()
 controller = SettingsController(model)
 diagnostics_controller = DiagnosticsController(controller, m.config.config_root())
@@ -15617,6 +15653,10 @@ DiagnosticsController = classes["DiagnosticsController"]
 
 QQuickStyle.setStyle("FluentWinUI3")
 app = QGuiApplication.instance() or QGuiApplication([])
+# Layout uses a synthetic endpoint, independent of runner audio hardware.
+m.audio_output.enumerate_output_endpoints = lambda: [
+    m.audio_output.AudioEndpoint("CABLE Input (VB-Audio Virtual Cable)", "Windows WASAPI")
+]
 model = ButtonMappingModel()
 controller = SettingsController(model)
 diagnostics_controller = DiagnosticsController(controller, m.config.config_root())
@@ -15815,6 +15855,10 @@ if profile:
     )
     m.config.save_config(m.config.config_path(), settings)
 app = QGuiApplication.instance() or QGuiApplication([])
+# Layout uses a synthetic endpoint, independent of runner audio hardware.
+m.audio_output.enumerate_output_endpoints = lambda: [
+    m.audio_output.AudioEndpoint("CABLE Input (VB-Audio Virtual Cable)", "Windows WASAPI")
+]
 model = ButtonMappingModel()
 controller = SettingsController(model)
 diagnostics_controller = DiagnosticsController(controller, m.config.config_root())

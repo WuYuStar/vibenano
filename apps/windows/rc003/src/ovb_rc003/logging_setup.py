@@ -307,7 +307,7 @@ class EvidenceFileHandler(RotatingFileHandler):
 def flush_application_logs(directory: Path) -> bool:
     directory = directory.resolve()
     with _async_handlers_lock:
-        handlers = [h for h in _async_handlers if Path(h.baseFilename).parent == directory]
+        handlers = [h for h in _async_handlers if Path(h.baseFilename).parent.resolve() == directory]
     return all([handler.flush_pending() for handler in handlers])
 
 

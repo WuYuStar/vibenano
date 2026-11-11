@@ -203,7 +203,7 @@ from ovb_rc003 import remote_selection
 assert remote_selection.saved_active_key() == sys.argv[2]
 """
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "RemoteMic" / "RC003" / "config.json"
+            path = Path(directory) / "VibeNano" / "RC003" / "config.json"
             path.parent.mkdir(parents=True)
             path.write_text(json.dumps({selection.KEY: saved_selection(), "voice_hotkey": {}}), encoding="utf-8")
             env = dict(os.environ, LOCALAPPDATA=directory)

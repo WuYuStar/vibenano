@@ -47,6 +47,7 @@ on:
   push:
     branches:
       - main
+      - "codex/vibenano-*"
     tags:
       - "v[0-9]*.[0-9]*.[0-9]*"
       - "v*-windows"
@@ -104,6 +105,7 @@ jobs:
     needs: nano-runtime
     env:
       RC003_PUBLIC_DISTRIBUTION: "1"
+      PYTHONUTF8: "1"
     runs-on: windows-2025
     timeout-minutes: 60
     defaults:

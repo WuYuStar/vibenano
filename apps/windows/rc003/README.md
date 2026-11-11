@@ -1,6 +1,6 @@
-# 无线麦 Windows 使用说明
+# VibeNano Windows 使用说明
 
-无线麦把小米遥控器2 Pro 和图示谷歌 Chromecast 遥控器变成 Windows 的远程按键和语音输入设备。
+VibeNano把小米遥控器2 Pro 和图示谷歌 Chromecast 遥控器变成 Windows 的远程按键和语音输入设备。
 
 **[VibeNano 下载页面与说明](https://github.com/WuYuStar/vibenano)** · [VibeNano 版本下载](https://github.com/WuYuStar/vibenano/releases)
 
@@ -9,14 +9,14 @@
 ## 下载与升级
 
 - 系统要求：64 位 Windows 10 1809 或更高版本。开发环境为 Windows 11 23H2，较早版本的兼容性尚未全面验证。
-- 使用免安装 ZIP，完整解压到新文件夹，再运行文件夹顶层的无线麦 EXE；不要只把 EXE 单独取出来。
+- 使用免安装 ZIP，完整解压到新文件夹，再运行文件夹顶层的 `VibeNano win版 <版本号>.exe`；不要只把 EXE 单独取出来。
 - 升级前从通知区域选择“完全退出”，把新 ZIP 解压到新文件夹，再运行新版。同机同一 Windows 账户下自动沿用原配置。
 - 程序未签名，Windows 可能显示安全提示。请从本仓库下载，并核对同次发布的 `SHA256SUMS.txt`。
 
 核对下载文件：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\RemoteMicRC003-<版本号>-portable-unsigned.zip
+Get-FileHash -Algorithm SHA256 .\VibeNano-<版本号>-portable-unsigned.zip
 ```
 
 结果应与清单中同名文件的哈希一致。
@@ -25,8 +25,8 @@ Get-FileHash -Algorithm SHA256 .\RemoteMicRC003-<版本号>-portable-unsigned.zi
 
 - **首次配置前，请先暂时退出 360 等杀毒软件；配置和测试完成后恢复防护。**
 - **使用搜狗、微信、豆包或 Chatterfly 时，首次使用语音前必须先安装 VB-CABLE 并重启电脑；本地语音识别不需要 VB-CABLE。**
-- 杀毒软件可能误报或隔离无线麦，造成启动、按键或语音异常。核实下载来源和 SHA-256，确认为误报后再恢复文件。
-- 可将无线麦程序或其专用安装／解压目录加入信任或白名单，范围仅限无线麦，保留其它防护。
+- 杀毒软件可能误报或隔离VibeNano，造成启动、按键或语音异常。核实下载来源和 SHA-256，确认为误报后再恢复文件。
+- 可将VibeNano程序或其专用安装／解压目录加入信任或白名单，范围仅限VibeNano，保留其它防护。
 
 ### 1. 配对遥控器
 
@@ -34,7 +34,7 @@ Get-FileHash -Algorithm SHA256 .\RemoteMicRC003-<版本号>-portable-unsigned.zi
 
 ### 2. 选择设备并连接
 
-1. 打开无线麦“设备”页，点击“选择设备”。
+1. 打开VibeNano“设备”页，点击“选择设备”。
 2. 选中遥控器，点击“使用此设备”。
 3. 点击“启动服务”，按页面提示处理未就绪状态。
 4. 连接后按一次方向键或确定键，确认能控制电脑。
@@ -83,14 +83,14 @@ Get-FileHash -Algorithm SHA256 .\RemoteMicRC003-<版本号>-portable-unsigned.zi
 
 ### 4. 设置语音
 
-无线麦提供“本地语音识别”和“外部语音程序”两条路径。本地路径使用 Fun-ASR-Nano CPU 量化识别；搜狗、微信、豆包和 Chatterfly 仍沿用各自原有的安装、音频及适用的快捷键要求。
+VibeNano提供“本地语音识别”和“外部语音程序”两条路径。本地路径使用 Fun-ASR-Nano CPU 量化识别；搜狗、微信、豆包和 Chatterfly 仍沿用各自原有的安装、音频及适用的快捷键要求。
 
 #### 本地识别：Fun-ASR-Nano
 
-1. 从托盘完全退出旧进程，再打开桌面的“无线麦 当前源码版”。
-2. 在“语音”中选择“中英混合识别 (Fun-ASR-Nano)”。本机已经准备好模型；新电脑在“本地模型”点击下载，可查看进度、暂停/继续和失败重试。
+1. 从托盘完全退出旧进程，再打开当前版本的 VibeNano。
+2. 在“语音”中选择“中英混合识别 (Fun-ASR-Nano)”。已有模型可直接复用；新电脑在“本地模型”点击下载，可查看进度、暂停/继续和失败重试。
 3. 光标放到文字框，按住话筒说话，松开后输出；Chromecast也支持开关型。第一次使用需加载模型，后续复用进程；退出或切换到外部输入法时释放。
-4. “识别性能”提供CPU线程数1/2/4/8。模型固定为f16编码器＋Q8解码器及FSMN VAD，总约1.28GB，缓存在`%LOCALAPPDATA%\RemoteMic\RC003\models\fun-asr-nano`，不包含在应用包中。
+4. “识别性能”提供CPU线程数1/2/4/8。模型固定为f16编码器＋Q8解码器及FSMN VAD，总约1.28GB，缓存在`%LOCALAPPDATA%\VibeNano\RC003\models\fun-asr-nano`，不包含在应用包中。
 
 支持中文夹英文，标点和停顿表达由模型决定；不承诺每次完全正确。原生组件使用AVX2/FMA/F16C，已在本机i5-1340P验证，旧电脑兼容性待测。
 
@@ -100,15 +100,15 @@ Get-FileHash -Algorithm SHA256 .\RemoteMicRC003-<版本号>-portable-unsigned.zi
 
 #### 搜狗、微信、豆包或 Chatterfly
 
-**这条路径需要在无线麦和所用输入法两边配置。**
+**这条路径需要在VibeNano和所用输入法两边配置。**
 
 1. 在“语音”页点击“安装音频”，安装 VB-CABLE，**完成后先重启电脑**。
-2. 在无线麦中选择语音程序，“输出端点”选择 `CABLE Input — Windows WASAPI`；没有 WASAPI 时可选 `Windows DirectSound`，不要选 `Windows WDM-KS`。
+2. 在VibeNano中选择语音程序，“输出端点”选择 `CABLE Input — Windows WASAPI`；没有 WASAPI 时可选 `Windows DirectSound`，不要选 `Windows WDM-KS`。
 3. 在对应输入法或 Chatterfly 的麦克风设置中选择 `CABLE Output`。
 4. 搜狗、微信和豆包需在两边选择相同的语音模式，并核对“语音按键”快捷键一致；可刷新读取或手动录入。
 5. 在记事本输入框中，先用实体键盘测试语音快捷键，再用遥控器话筒键测试。Chatterfly 直接控制录音，无需快捷键。
 
-`CABLE Input` 是无线麦写入声音的一侧，`CABLE Output` 是输入法读取麦克风的一侧，不能选反。
+`CABLE Input` 是VibeNano写入声音的一侧，`CABLE Output` 是输入法读取麦克风的一侧，不能选反。
 
 遥控器的使用方式：
 
@@ -121,7 +121,7 @@ Get-FileHash -Algorithm SHA256 .\RemoteMicRC003-<版本号>-portable-unsigned.zi
 ### 豆包更新
 
 - 豆包更新后，遥控语音可能暂时不可用。
-- 建议关闭豆包自动更新，确认无线麦兼容后再手动更新。
+- 建议关闭豆包自动更新，确认VibeNano兼容后再手动更新。
 
 ## 日常使用
 
@@ -150,9 +150,9 @@ Get-FileHash -Algorithm SHA256 .\RemoteMicRC003-<版本号>-portable-unsigned.zi
 
 `.102/.103` 提示“读取设备失败”时，可使用[设备读取报告脚本](scripts/collect-device-read-report.cmd)：
 
-1. 打开报错的无线麦版本，停在报错界面。
+1. 打开报错的VibeNano版本，停在报错界面。
 2. 把脚本放在该版本 EXE 旁，双击运行，等待显示完成；通常约 30～90 秒。
-3. 将桌面生成的 `无线麦设备读取报告-时间-短编号.txt` 发给开发者，无需另导日志。
+3. 将桌面生成的 `VibeNano设备读取报告-时间-短编号.txt` 发给开发者，无需另导日志。
 
 脚本不改配对、驱动或软件设置，不自动上传。报告包含系统和蓝牙诊断信息，请仅用于排查反馈。
 
@@ -162,11 +162,11 @@ Get-FileHash -Algorithm SHA256 .\RemoteMicRC003-<版本号>-portable-unsigned.zi
 
 ### 输入法有气泡，但没有声音
 
-确认无线麦选 `CABLE Input`、输入法麦克风选 `CABLE Output`，再运行“检查虚拟声卡”。两边不能选反或选成同一个端点。
+确认VibeNano选 `CABLE Input`、输入法麦克风选 `CABLE Output`，再运行“检查虚拟声卡”。两边不能选反或选成同一个端点。
 
 ### 语音键没有唤起输入法
 
-搜狗、微信和豆包：先在同一输入框用实体键盘测试快捷键。键盘也不生效时，检查输入法设置和快捷键冲突；键盘正常时，再核对无线麦的模式和快捷键。
+搜狗、微信和豆包：先在同一输入框用实体键盘测试快捷键。键盘也不生效时，检查输入法设置和快捷键冲突；键盘正常时，再核对VibeNano的模式和快捷键。
 
 Chatterfly：确认程序已运行且没有另一段录音；仍失败时导出日志反馈。
 
@@ -193,21 +193,21 @@ Chatterfly：确认程序已运行且没有另一段录音；仍失败时导出�
 用户配置和日志位于：
 
 ```text
-%LOCALAPPDATA%\RemoteMic\RC003
+%LOCALAPPDATA%\VibeNano\RC003
 ```
 
 本地识别模型缓存位于：
 
 ```text
-%LOCALAPPDATA%\RemoteMic\RC003\models\faster-whisper
+%LOCALAPPDATA%\VibeNano\RC003\models\faster-whisper
 ```
 
 - 同机同一 Windows 账户下升级会沿用原设置和已下载模型。
 - 按键方案的副本和导出文件会包含预设文字、程序完整路径，请注意隐私。
 - 旧版不识别新增的“输入文字”“打开程序”动作；回退时使用添加这些动作前的配置备份。
 - 删除免安装程序文件夹不会自动删除这里的数据。若开启过“随 Windows 启动”，移动或删除程序前先关闭该选项。
-- 只清理模型时，先完全退出无线麦，再删除上述 `models\faster-whisper` 缓存目录；保留配置和日志，下次使用相应模型时会重新下载。
-- 要完全清除设置、日志和模型缓存，请先完全退出无线麦，再删除整个 RC003 配置目录。该目录由同机同一 Windows 账户下的安装版和便携版共用，仍有其它 RC003 安装时不要删除。
+- 只清理模型时，先完全退出VibeNano，再删除上述 `models\faster-whisper` 缓存目录；保留配置和日志，下次使用相应模型时会重新下载。
+- 要完全清除设置、日志和模型缓存，请先完全退出VibeNano，再删除整个 RC003 配置目录。该目录由同机同一 Windows 账户下的安装版和便携版共用，仍有其它 RC003 安装时不要删除。
 
 ## 支持范围与限制
 
@@ -220,7 +220,7 @@ Chatterfly：确认程序已运行且没有另一段录音；仍失败时导出�
 
 ## 隐私与第三方组件
 
-配置、模型缓存和日志保存在本机。无线麦不向项目服务器上传遥控器地址、按键记录、录音、识别文本或个人数据。使用本地识别时，模型托管站点只用于模型下载和更新查询，本地引擎不上传音频或识别文本；外部语音程序是否联网、如何识别和润色由该程序自身决定。“检查更新”仍按前文说明访问本项目的 GitHub Releases。
+配置、模型缓存和日志保存在本机。VibeNano不向项目服务器上传遥控器地址、按键记录、录音、识别文本或个人数据。使用本地识别时，模型托管站点只用于模型下载和更新查询，本地引擎不上传音频或识别文本；外部语音程序是否联网、如何识别和润色由该程序自身决定。“检查更新”仍按前文说明访问本项目的 GitHub Releases。
 
 VB-CABLE 是 VB-Audio 的独立 Donationware。详见[组件说明](ATTRIBUTION.md)、[第三方许可](../../../legal/THIRD_PARTY_NOTICES.md)和[素材授权](../../../legal/ASSET_LICENSES.md)。
 
