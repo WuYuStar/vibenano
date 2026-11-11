@@ -293,7 +293,11 @@ jobs:
           $repoRoot = (Resolve-Path "../../..").Path
           $buildRoot = Join-Path $rc003Root "dist/RemoteMicRC003"
           $provenancePath = Clear-RC003BuildProvenance -RC003Root $rc003Root -BuildRoot $buildRoot -PythonExecutable "python"
-          git -C $repoRoot diff --exit-code -- apps/windows/rc003 .github/workflows/windows-rc003-ci.yml Resources/RC003-remote-photo.png device-profiles
+          # Qt regenerates this ICO before the checked input fingerprint is
+          # captured. Its PNG bytes may differ across hosts. All source files
+          # must remain clean; the fingerprint below still detects ANY later
+          # change to the generated icon, including changes during tests.
+          git -C $repoRoot diff --exit-code -- apps/windows/rc003 .github/workflows/windows-rc003-ci.yml Resources/RC003-remote-photo.png device-profiles ':(exclude)apps/windows/rc003/src/ovb_rc003/assets/icons/remote-mic.ico'
           if ($LASTEXITCODE -ne 0) {
             throw "tracked build or test inputs changed after their CI checks ran"
           }

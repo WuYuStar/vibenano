@@ -1519,6 +1519,15 @@ class WindowsCiWorkflowTests(unittest.TestCase):
         self.assertLess(write_index, assert_index)
         self.assertIn("rc003-build-input.json", self.text)
 
+    def test_only_the_prechecked_generated_icon_can_differ_from_git(self):
+        exclusion = ":(exclude)apps/windows/rc003/src/ovb_rc003/assets/icons/remote-mic.ico"
+        self.assertEqual(self.text.count(exclusion), 1)
+        self.assertLess(self.text.index("python build/generate-app-icon.py"),
+                        self.text.index("$inputState = Get-RC003BuildInputState"))
+        self.assertLess(self.text.index("$inputState = Get-RC003BuildInputState"),
+                        self.text.index("- name: Run test suite"))
+        self.assertIn("$currentInputState.FingerprintSha256 -ne [string]$inputState.FingerprintSha256", self.text)
+
     def test_installer_compilation_is_suspended(self):
         self.assertNotIn("ISCC.exe", self.text)
         self.assertNotIn("choco install innosetup", self.text)
@@ -2209,6 +2218,7 @@ class BuildProvenanceScriptTests(unittest.TestCase):
             chromecast_photo = repo_root / "Resources" / "Chromecast-remote-photo.png"
             fixture_files = {
                 source_file: "alpha",
+                rc003_root / "src/ovb_rc003/assets/icons/remote-mic.ico": b"icon",
                 rc003_root / "src" / "ovb_rc003" / "VERSION": "0.0.1-test\n",
                 rc003_root / "tests" / "test_sample.py": "VALUE = 1\n",
                 rc003_root / "build" / "build-candidate.ps1": "fixture\n",
@@ -2347,6 +2357,24 @@ Write-RC003BuildProvenance `
     -BuildRoot $env:RC003_FIXTURE_BUILD `
     -InputState $inputState `
     -ExecutableMetadataVerified | Out-Null
+Assert-RC003BuildProvenance `
+    -RC003Root $env:RC003_FIXTURE_ROOT `
+    -RepoRoot $env:RC003_FIXTURE_REPO `
+    -BuildRoot $env:RC003_FIXTURE_BUILD | Out-Null
+# Generated assets remain covered after the pre-test fingerprint.
+$iconPath = Join-Path $env:RC003_FIXTURE_ROOT 'src/ovb_rc003/assets/icons/remote-mic.ico'
+[System.IO.File]::WriteAllText($iconPath, 'changed-icon')
+try {
+    Assert-RC003BuildProvenance `
+        -RC003Root $env:RC003_FIXTURE_ROOT `
+        -RepoRoot $env:RC003_FIXTURE_REPO `
+        -BuildRoot $env:RC003_FIXTURE_BUILD | Out-Null
+    throw 'changed generated icon was accepted'
+} catch {
+    if ($_.Exception.Message -eq 'changed generated icon was accepted') { throw }
+    if ($_.Exception.Message -notmatch 'build inputs changed') { throw }
+}
+[System.IO.File]::WriteAllBytes($iconPath, [System.Text.Encoding]::UTF8.GetBytes('icon'))
 Assert-RC003BuildProvenance `
     -RC003Root $env:RC003_FIXTURE_ROOT `
     -RepoRoot $env:RC003_FIXTURE_REPO `
