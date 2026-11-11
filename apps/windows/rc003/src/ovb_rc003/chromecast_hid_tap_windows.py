@@ -193,7 +193,8 @@ def _symbol_cache() -> Path:
     root = os.environ.get("LOCALAPPDATA")
     if not root:
         raise TapError("hid_symbol_unavailable", detail="cache_root")
-    return Path(root) / "RemoteMic" / "HidSymbols"
+    from .config import APP_ID
+    return Path(root) / APP_ID / "HidSymbols"
 
 
 def _ensure_pdb(module: Path) -> Path:

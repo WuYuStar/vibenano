@@ -100,12 +100,7 @@ def _consumer_key(executable: Path) -> str:
 
 
 def consumer_directory(config_root: Path) -> Path:
-    from . import config, dev_session
-    root = Path(config_root)
-    if not dev_session.is_isolated() and root == config.config_root():
-        # Shared with earlier installations: old uninstallers must see new users.
-        root = config.legacy_config_root()
-    return root / CONSUMER_DIRECTORY_NAME
+    return Path(config_root) / CONSUMER_DIRECTORY_NAME
 
 
 def consumer_marker_path(config_root: Path, executable: Path) -> Path:

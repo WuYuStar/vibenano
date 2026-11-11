@@ -4,7 +4,7 @@
 
 **[VibeNano 下载页面与说明](https://github.com/WuYuStar/vibenano)** · [VibeNano 版本下载](https://github.com/WuYuStar/vibenano/releases)
 
-**当前源码状态：** 1.0.108 发布版，软件名称统一为 VibeNano，数据目录改为 `%LOCALAPPDATA%\VibeNano\RC003`。首次启动兼容迁移旧设置与已下载的 Nano 模型；旧目录保留备份。下载见项目首页；1.0.107 历史公开附件不变。
+**当前源码状态：** 1.0.109 发布版，软件名称统一为 VibeNano，数据目录改为 `%LOCALAPPDATA%\VibeNano\RC003`。首次启动兼容迁移旧设置与已下载的 Nano 模型；权限登记和设备缓存也使用 VibeNano 目录。下载见项目首页；1.0.107 历史公开附件不变。
 
 ## 下载与升级
 

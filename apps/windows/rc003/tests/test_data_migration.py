@@ -107,9 +107,15 @@ class DataMigrationTests(unittest.TestCase):
         config.migrate_legacy_data()
         self.assertEqual(config.control_root(), self.new)
 
-    def test_helper_registry_stays_shared_with_old_installations(self):
+    def test_helper_registry_uses_new_directory_without_recreating_legacy_root(self):
         self.assertEqual(hid_helper_consumers.consumer_directory(self.new),
-                         hid_helper_consumers.consumer_directory(self.old))
+                         self.new / "hid-helper-consumers")
+        self.assertFalse(self.old.exists())
+
+    def test_device_symbol_cache_uses_new_brand_directory(self):
+        from ovb_rc003 import chromecast_hid_tap_windows as tap
+        self.assertEqual(tap._symbol_cache(), self.base / "VibeNano/HidSymbols")
+        self.assertFalse((self.base / "RemoteMic").exists())
 
     def test_isolated_session_never_imports_normal_user_data(self):
         with mock.patch.object(dev_session, "is_isolated", return_value=True), \

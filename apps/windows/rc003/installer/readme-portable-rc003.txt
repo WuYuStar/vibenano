@@ -1,11 +1,11 @@
 VibeNano：WuYuStar 基于上游无线麦与 Open Voice Bridge 维护的 GPL-3.0-only 衍生版。
 版本下载：https://github.com/WuYuStar/vibenano/releases
-1.0.108 发布版。首次升级前请完全退出旧版；程序会导入旧配置并复用已下载的 Nano 模型。
-新数据目录：%LOCALAPPDATA%\VibeNano\RC003。旧目录保留备份，请暂时不要手动删除。
+1.0.109 发布版。首次升级前请完全退出旧版；程序会导入旧配置并复用已下载的 Nano 模型。
+新数据目录：%LOCALAPPDATA%\VibeNano\RC003。权限登记与设备缓存也使用 VibeNano 目录。
 
-VibeNano 1.0.108 便携版
+VibeNano 1.0.109 便携版
 ======================
-完整解压后，双击根目录“VibeNano win版 1.0.108.exe”。
+完整解压后，双击根目录“VibeNano win版 1.0.109.exe”。
 公开发布包不附带VB-CABLE驱动；外部输入法用户须从 https://vb-audio.com/Cable/ 自行下载安装并重启，应用内离线驱动安装入口不可用。Nano本地识别不需要该驱动。
 本地识别只保留 Fun-ASR-Nano；旧本地模型配置自动迁移，外部输入法继续保留。
 已有 Nano 模型可直接使用；首次下载在“语音”页查看进度、暂停/继续或重试。
