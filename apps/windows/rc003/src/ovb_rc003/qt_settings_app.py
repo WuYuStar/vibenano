@@ -9129,6 +9129,7 @@ def _load_qt_classes() -> dict:
                         cancel_event=cancel_event,
                         progress_callback=report_progress,
                     )
+                    download_destination.mkdir(parents=True, exist_ok=True)
                     result = application_update.save_update_to_desktop(
                         result, download_destination, cancel_event=cancel_event
                     )

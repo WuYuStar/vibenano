@@ -459,6 +459,13 @@ class SettingsControllerTests(unittest.TestCase):
         )
         self._env_patch.start()
         os.environ.pop(qt_settings_app.config.PORTABLE_ROOT_ENV, None)
+        frozen_root_patch = mock.patch.object(
+            qt_settings_app.config,
+            "_frozen_program_root",
+            return_value=Path(self._tmpdir.name),
+        )
+        frozen_root_patch.start()
+        self.addCleanup(frozen_root_patch.stop)
         self._bridge_status_patch = mock.patch.object(
             qt_settings_app.single_instance,
             "bridge_instance_running",
@@ -8050,7 +8057,10 @@ class SettingsControllerTests(unittest.TestCase):
         self.assertFalse(controller.applicationUpdateCanDownload)
         self.assertEqual(controller.applicationUpdateDownloadProgress, 1.0)
         self.assertTrue(Path(controller.applicationUpdateDownloadedPath).is_file())
-        self.assertEqual(Path(controller.applicationUpdateDownloadedPath).parent, self._desktop)
+        self.assertEqual(
+            Path(controller.applicationUpdateDownloadedPath).parent,
+            controller._config_root / "downloads",
+        )
         self.assertIn("不会覆盖现有目录", controller.applicationUpdateMessage)
         cleanup.assert_called_once_with(
             controller._config_root / "updates",
@@ -10273,6 +10283,9 @@ def popup_geometry(popup):
     }
 
 
+import os
+from pathlib import Path
+m.config._frozen_program_root = lambda: Path(os.environ["LOCALAPPDATA"])
 setattr(sys, "frozen", True)
 m.single_instance.bridge_instance_running = lambda: False
 m.startup_windows.rebind_owned_frozen_startup = (
@@ -13902,7 +13915,7 @@ class OffscreenQmlLoadTests(unittest.TestCase):
                 downloaded = data["downloaded"]
                 self.assertEqual(downloaded["title"], "更新包已下载")
                 self.assertTrue(downloaded["folder"]["visible"])
-                self.assertEqual(downloaded["folder_text"], "打开桌面")
+                self.assertEqual(downloaded["folder_text"], "打开下载目录")
                 self.assertTrue(downloaded["progress_visible"])
                 self.assertAlmostEqual(downloaded["progress"], 1.0, delta=0.001)
 

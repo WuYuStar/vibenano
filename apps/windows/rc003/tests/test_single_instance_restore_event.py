@@ -189,6 +189,7 @@ class NativeRestoreEventTests(unittest.TestCase):
         # the event, production registration/polling, QML and cleanup are real.
         script = r'''
 import sys
+import time
 from PySide6.QtCore import QTimer
 from ovb_rc003 import qt_settings_app as m
 si = m.single_instance
@@ -202,31 +203,36 @@ si._real_set_window_property_value = publish
 original_connect = m._connect_application_exit
 def connect(app, controller):
     original_connect(app, controller)
-    def check(stage):
+    def check(stage, deadline=None):
         try:
             window = next(w for w in app.topLevelWindows() if w.title() == controller.applicationPresentationLabel)
             hwnd = controller._settings_window_hwnd
             if stage in (0, 2):
                 assert not window.isVisible(), "window should be hidden"
                 assert si._real_signal_restore_event(hwnd, published[hwnd]), "event signal failed"
-            elif stage == 1:
-                assert window.isVisible(), "first restore failed"
-                window.close()
-            else:
-                assert window.isVisible(), "second restore failed"
-                controller.requestApplicationExit()
+            elif stage in (1, 3):
+                if not window.isVisible():
+                    if deadline is not None and time.monotonic() < deadline:
+                        QTimer.singleShot(100, lambda: check(stage, deadline))
+                        return
+                if stage == 1:
+                    assert window.isVisible(), "first restore failed"
+                    window.close()
+                else:
+                    assert window.isVisible(), "second restore failed"
+                    controller.requestApplicationExit()
         except Exception as exc:
             print(repr(exc), file=sys.stderr)
             app.exit(2)
             return
         if stage < 3:
-            # Schedule from the completed operation, not from before QML
-            # construction. Slow first-time loading can otherwise make all
-            # absolute timers overdue before the restore poll runs once.
-            delay = (400, 250, 400)[stage]
-            QTimer.singleShot(delay, lambda: check(stage + 1))
+            # Schedule after the 500ms QML restore poll interval, allowing extra
+            # time on loaded CI VMs for the window to surface.
+            delay = (600, 250, 600)[stage]
+            next_deadline = time.monotonic() + 2.5 if stage in (0, 2) else None
+            QTimer.singleShot(delay, lambda: check(stage + 1, next_deadline))
     QTimer.singleShot(50, lambda: check(0))
-    QTimer.singleShot(5000, lambda: app.exit(3))
+    QTimer.singleShot(8000, lambda: app.exit(3))
 m._connect_application_exit = connect
 result = m.run_settings_window(start_hidden=True)
 assert not si._settings_window_restore_events, "event leaked after shutdown"
