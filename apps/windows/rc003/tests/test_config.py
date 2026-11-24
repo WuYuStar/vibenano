@@ -22,6 +22,49 @@ class ConfigRootTests(unittest.TestCase):
         self.assertEqual(root, Path.home() / "VibeNano" / "RC003")
 
 
+class PortableConfigRootTests(unittest.TestCase):
+    def test_frozen_main_executable_uses_data_beside_it(self):
+        with tempfile.TemporaryDirectory() as root:
+            executable = Path(root) / "VibeNano win版 1.1.0.exe"
+            with mock.patch.dict("os.environ", {}, clear=True), \
+                    mock.patch.object(config.sys, "frozen", True, create=True), \
+                    mock.patch.object(config.sys, "executable", str(executable)):
+                self.assertEqual(
+                    config.config_root(), Path(root).resolve() / "data" / "RC003"
+                )
+
+    def test_bundled_helper_uses_the_main_package_data(self):
+        with tempfile.TemporaryDirectory() as root:
+            executable = Path(root) / "程序文件" / "RemoteMicRC003HidHelper.exe"
+            with mock.patch.dict("os.environ", {}, clear=True), \
+                    mock.patch.object(config.sys, "frozen", True, create=True), \
+                    mock.patch.object(config.sys, "executable", str(executable)):
+                self.assertEqual(
+                    config.config_root(), Path(root).resolve() / "data" / "RC003"
+                )
+
+    def test_explicit_portable_root_also_redirects_cache_and_temp(self):
+        with tempfile.TemporaryDirectory() as root:
+            with mock.patch.dict(
+                "os.environ", {config.PORTABLE_ROOT_ENV: root}, clear=True
+            ):
+                config.configure_portable_environment()
+                import os
+
+                self.assertEqual(
+                    config.config_root(), Path(root).resolve() / "data" / "RC003"
+                )
+                self.assertEqual(
+                    os.environ["QML_DISK_CACHE_PATH"],
+                    str(Path(root).resolve() / "data" / "cache" / "qmlcache"),
+                )
+                self.assertEqual(
+                    os.environ["TEMP"], str(Path(root).resolve() / "data" / "tmp")
+                )
+                self.assertTrue((Path(root) / "data" / "cache").is_dir())
+                self.assertTrue((Path(root) / "data" / "tmp").is_dir())
+
+
 class DefaultConfigPrivacyTests(unittest.TestCase):
     def test_default_config_uses_rc003_and_the_right_alt_hold_shortcut(self):
         defaults = config.default_config()

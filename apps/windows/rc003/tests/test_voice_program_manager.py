@@ -790,8 +790,8 @@ class VoiceProgramLaunchTests(unittest.TestCase):
                 ),
             )
         self.assertTrue(result.started)
-        self.assertEqual(Path(calls[0][0]), shortcut)
-        self.assertEqual(Path(calls[0][2]), shortcut.parent)
+        self.assertEqual(Path(calls[0][0]).resolve(), shortcut.resolve())
+        self.assertEqual(Path(calls[0][2]).resolve(), shortcut.parent.resolve())
 
     def test_custom_program_does_not_match_same_name_from_another_path(self):
         with tempfile.TemporaryDirectory() as tmp:

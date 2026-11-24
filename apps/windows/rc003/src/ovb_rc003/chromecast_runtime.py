@@ -28,6 +28,7 @@ class RuntimeServices:
     release_inputs: Callable
     route_edge: Callable
     resume_input: Callable = lambda: None
+    telemetry_enabled: Callable[[], bool] = lambda: True
 
 
 class ChromecastRuntime:
@@ -74,7 +75,8 @@ class ChromecastRuntime:
         self.voice_host = self.services.create_voice_host()
         self.client = Client(self.services.selected_key(), mode="run", on_edge=self.on_edge,
                                   on_lost=self.cancel_input,
-                                  on_voice=self.voice_host.enqueue)
+                                  on_voice=self.voice_host.enqueue,
+                                  telemetry_enabled=self.services.telemetry_enabled)
         self.client.on_ready = self.receiver_ready
         self.voice_host.start(self.client)
         try:

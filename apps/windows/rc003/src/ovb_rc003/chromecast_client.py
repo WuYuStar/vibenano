@@ -46,13 +46,15 @@ def message(reason):
 
 
 class Client:
-    def __init__(self, entity, *, mode, on_edge, on_lost=None, on_voice=None):
+    def __init__(self, entity, *, mode, on_edge, on_lost=None, on_voice=None,
+                 telemetry_enabled=None):
         if mode not in ("detect", "run", "setup") or (mode == "setup" and on_voice is not None):
             raise ValueError("invalid_mode")
         self.identity = SessionIdentity.create(entity)
         self.mode, self.on_edge = mode, on_edge
         self.on_lost = on_lost
         self.on_voice = on_voice
+        self._telemetry_enabled = telemetry_enabled
         self._voice_commands = queue.Queue(maxsize=32)
         self.cancel, self.finished, self.ready = threading.Event(), threading.Event(), threading.Event()
         self.failed, self.retry_ready = threading.Event(), threading.Event()
@@ -84,6 +86,14 @@ class Client:
         self._terminal_at = None
         self._process_identities = {}
 
+    def _log_telemetry(self, logger, message, *args):
+        """Keep verbose telemetry optional without hiding state changes/errors."""
+
+        enabled = True if self._telemetry_enabled is None else bool(
+            self._telemetry_enabled()
+        )
+        (logger.info if enabled else logger.debug)(message, *args)
+
     def _count_input(self, name):
         self._input_counts[name] = min(2**31 - 1, self._input_counts[name] + 1)
 
@@ -93,7 +103,9 @@ class Client:
             return
         self._last_input_log = now
         try:
-            logging.getLogger("ovb_rc003").info(
+            logger = logging.getLogger("ovb_rc003")
+            self._log_telemetry(
+                logger,
                 "Chromecast input delivery run=%s mode=%s final=%s counts=%s",
                 self.identity.generation[:12], self.mode, final,
                 json.dumps(self._input_counts, separators=(",", ":")))
@@ -143,8 +155,10 @@ class Client:
     def _observe_evidence(self, event):
         record = event["record"]
         logger = logging.getLogger("ovb_rc003")
-        logger.info("Chromecast evidence run=%s seq=%s record=%s",
-            self.identity.generation[:12], event["seq"], json.dumps(record, separators=(",", ":")))
+        self._log_telemetry(
+            logger, "Chromecast evidence run=%s seq=%s record=%s",
+            self.identity.generation[:12], event["seq"],
+            json.dumps(record, separators=(",", ":")))
         if (record.get("kind") == "voice_cleanup" and record["state"] == "done"
                 and record["outcome"] != "success"):
             # The report keeps the first failure and latest summary independently

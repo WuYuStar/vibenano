@@ -812,6 +812,8 @@ def _handoff_previous_application(
 def main() -> None:
     import multiprocessing
     multiprocessing.freeze_support()
+    from . import config
+    config.configure_portable_environment()
     args = dev_session.consume_marker(sys.argv[1:])
     if "--local-model-check" in args:
         from . import package_smoke

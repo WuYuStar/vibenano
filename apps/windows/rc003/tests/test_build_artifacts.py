@@ -48,7 +48,7 @@ _ROOT_README_PATH = _REPO_ROOT / "README.md"
 
 
 def _formal_version_from_landing(landing):
-    match = re.search(r"当前正式版为 \*\*(\d+\.\d+\.\d+)\*\*", landing)
+    match = re.search(r"\[(\d+\.\d+\.\d+)\]\(https://github\.com/WuYuStar/vibenano/releases/tag/v\1\)", landing)
     if match is None:
         raise AssertionError("landing page does not identify a formal release")
     return match.group(1)
@@ -1450,7 +1450,8 @@ class WindowsCiWorkflowTests(unittest.TestCase):
         self.assertIn('python-version: "3.12.10"', self.text)
 
     def test_scoped_to_rc003_paths(self):
-        self.assertIn("apps/windows/rc003/**", self.text)
+        self.assertIn("working-directory: apps/windows/rc003", self.text)
+        self.assertIn("workflow_dispatch:", self.text)
 
     def test_runs_public_boundary_scan(self):
         self.assertIn("check-public-boundary.ps1", self.text)
@@ -1519,6 +1520,15 @@ class WindowsCiWorkflowTests(unittest.TestCase):
         self.assertLess(write_index, assert_index)
         self.assertIn("rc003-build-input.json", self.text)
 
+    def test_only_the_prechecked_generated_icon_can_differ_from_git(self):
+        exclusion = ":(exclude)apps/windows/rc003/src/ovb_rc003/assets/icons/remote-mic.ico"
+        self.assertEqual(self.text.count(exclusion), 1)
+        self.assertLess(self.text.index("python build/generate-app-icon.py"),
+                        self.text.index("$inputState = Get-RC003BuildInputState"))
+        self.assertLess(self.text.index("$inputState = Get-RC003BuildInputState"),
+                        self.text.index("- name: Run test suite"))
+        self.assertIn("$currentInputState.FingerprintSha256 -ne [string]$inputState.FingerprintSha256", self.text)
+
     def test_installer_compilation_is_suspended(self):
         self.assertNotIn("ISCC.exe", self.text)
         self.assertNotIn("choco install innosetup", self.text)
@@ -1584,35 +1594,12 @@ class WindowsCiWorkflowTests(unittest.TestCase):
         self.assertLess(package_index, upload_index)
 
     def test_triggers_on_files_the_installer_and_spec_consume_outside_rc003(self):
-        # XRBM-022 controller pre-review correction: the installer (.iss)
-        # packages root COPYRIGHT/LICENSE/THIRD_PARTY_NOTICES.md, and the
-        # device-profiles/xiaomi-rc003.json documents identity/HID facts
-        # this Windows adapter mirrors - none of these live under
-        # apps/windows/rc003/, so the path-scoped trigger above would
-        # otherwise silently skip CI on a change to any of them.
-        #
-        # Matched as an exact YAML list-item LINE (leading "      - "),
-        # not a bare substring: the portable-packaging step below also
-        # quotes some of these same filenames as Copy-Item destination
-        # names (e.g. `(Join-Path $stagingDir "THIRD_PARTY_NOTICES.md")`),
-        # which is unrelated to the push/pull_request trigger list and
-        # must not be counted as a trigger occurrence.
-        for path_trigger in (
-            "legal/COPYRIGHT.md",
-            "LICENSE.md",
-            "legal/THIRD_PARTY_NOTICES.md",
-            "legal/THIRD_PARTY_SOURCE.md",
-            "legal/ASSET_LICENSES.md",
-            "THIRD_PARTY_LICENSES/**",
-            "Resources/RC003-remote-photo.png",
-            "device-profiles/xiaomi-rc003.json",
-        ):
-            trigger_line = f'      - "{path_trigger}"'
-            self.assertEqual(
-                self.text.count(trigger_line),
-                2,
-                f'{trigger_line!r} must appear once under push.paths and once under pull_request.paths',
-            )
+        # CI runs only on explicit workflow_dispatch so pushing code or
+        # creating releases never triggers automatic builds.
+        on_block = self.text.split("\npermissions:", 1)[0]
+        self.assertIn("workflow_dispatch:", on_block)
+        self.assertNotIn("\n  push:", on_block)
+        self.assertNotIn("\n  pull_request:", on_block)
 
     def test_pip_cache_invalidates_for_dev_and_direct_runtime_pins(self):
         self.assertIn("cache-dependency-path: |", self.text)
@@ -1627,8 +1614,6 @@ class WindowsCiWorkflowTests(unittest.TestCase):
 
     def test_supports_manual_and_release_tag_builds_without_auto_publishing(self):
         self.assertIn("workflow_dispatch:", self.text)
-        self.assertIn('      - "v*-windows"', self.text)
-        self.assertIn('      - "v*-windows-rc003-candidate.*"', self.text)
         self.assertIn("check-release-readiness.py --enforce", self.text)
         self.assertIn("if: startsWith(github.ref, 'refs/tags/')", self.text)
         self.assertNotIn("gh release create", self.text)
@@ -1713,7 +1698,7 @@ class WindowsCiWorkflowTests(unittest.TestCase):
         self.assertIn("Compress-Archive", self.text)
         self.assertIn("Get-FileHash", self.text)
         self.assertIn("SHA256SUMS.txt", self.text)
-        self.assertIn("VibeNano-Windows-$version-免安装.zip", self.text)
+        self.assertIn("VibeNano-$version-portable-unsigned.zip", self.text)
 
     def test_portable_zip_stages_license_source_assets_attribution_and_readme(self):
         # XRBM-022 controller pre-review correction: the portable ZIP
@@ -1888,7 +1873,7 @@ class WindowsCiWorkflowTests(unittest.TestCase):
         step = self._package_step_text()
         self.assertNotIn('installerExe', step)
         self.assertNotIn('Get-ChildItem -Path dist/installer', step)
-        self.assertIn('$zipPath = "dist/portable/VibeNano-Windows-$version-免安装.zip"', step)
+        self.assertIn('$zipPath = "dist/portable/VibeNano-$version-portable-unsigned.zip"', step)
 
     def test_portable_staging_directory_is_a_single_versioned_top_level_folder(self):
         # Compress-Archive given a bare directory path (not a "/*" content
@@ -2209,6 +2194,7 @@ class BuildProvenanceScriptTests(unittest.TestCase):
             chromecast_photo = repo_root / "Resources" / "Chromecast-remote-photo.png"
             fixture_files = {
                 source_file: "alpha",
+                rc003_root / "src/ovb_rc003/assets/icons/remote-mic.ico": b"icon",
                 rc003_root / "src" / "ovb_rc003" / "VERSION": "0.0.1-test\n",
                 rc003_root / "tests" / "test_sample.py": "VALUE = 1\n",
                 rc003_root / "build" / "build-candidate.ps1": "fixture\n",
@@ -2347,6 +2333,24 @@ Write-RC003BuildProvenance `
     -BuildRoot $env:RC003_FIXTURE_BUILD `
     -InputState $inputState `
     -ExecutableMetadataVerified | Out-Null
+Assert-RC003BuildProvenance `
+    -RC003Root $env:RC003_FIXTURE_ROOT `
+    -RepoRoot $env:RC003_FIXTURE_REPO `
+    -BuildRoot $env:RC003_FIXTURE_BUILD | Out-Null
+# Generated assets remain covered after the pre-test fingerprint.
+$iconPath = Join-Path $env:RC003_FIXTURE_ROOT 'src/ovb_rc003/assets/icons/remote-mic.ico'
+[System.IO.File]::WriteAllText($iconPath, 'changed-icon')
+try {
+    Assert-RC003BuildProvenance `
+        -RC003Root $env:RC003_FIXTURE_ROOT `
+        -RepoRoot $env:RC003_FIXTURE_REPO `
+        -BuildRoot $env:RC003_FIXTURE_BUILD | Out-Null
+    throw 'changed generated icon was accepted'
+} catch {
+    if ($_.Exception.Message -eq 'changed generated icon was accepted') { throw }
+    if ($_.Exception.Message -notmatch 'build inputs changed') { throw }
+}
+[System.IO.File]::WriteAllBytes($iconPath, [System.Text.Encoding]::UTF8.GetBytes('icon'))
 Assert-RC003BuildProvenance `
     -RC003Root $env:RC003_FIXTURE_ROOT `
     -RepoRoot $env:RC003_FIXTURE_REPO `
@@ -2579,7 +2583,7 @@ if (-not (Test-Path -LiteralPath $paths.ProvenanceFile -PathType Leaf)) {
                 if path.is_file():
                     archive.write(path, f"{top_name}/{path.relative_to(staging).as_posix()}")
 
-    def _validate_archive(self, archive_path, staging):
+    def _validate_archive(self, archive_path, staging, *, staging_path=None):
         command = r"""
 $ErrorActionPreference = 'Stop'
 . $env:RC003_LAYOUT_SCRIPT
@@ -2600,7 +2604,7 @@ Assert-RC003PortableZip `
             RC003_ARCHIVE=str(archive_path),
             RC003_TOP=staging.name,
             RC003_VERSION=self._presentation["version"],
-            RC003_STAGING=str(staging),
+            RC003_STAGING=str(staging_path or staging),
         )
 
     def test_portable_validator_accepts_the_exact_tree_and_nested_empty_directory(self):
@@ -2610,6 +2614,24 @@ Assert-RC003PortableZip `
             archive_path = root / "valid.zip"
             self._create_archive(archive_path, staging)
             result = self._validate_archive(archive_path, staging)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_portable_validator_accepts_windows_short_staging_alias(self):
+        import ctypes
+        from ctypes import wintypes
+        with tempfile.TemporaryDirectory() as directory:
+            staging = self._create_staging_tree(Path(directory))
+            archive = Path(directory) / "alias.zip"
+            self._create_archive(archive, staging)
+            get_short = ctypes.WinDLL("kernel32", use_last_error=True).GetShortPathNameW
+            get_short.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+            get_short.restype = wintypes.DWORD
+            buffer = ctypes.create_unicode_buffer(32768)
+            if not get_short(str(staging), buffer, len(buffer)):
+                self.skipTest("8.3 paths unavailable on this volume")
+            if buffer.value.casefold() == str(staging).casefold():
+                self.skipTest("volume does not generate an 8.3 alias")
+            result = self._validate_archive(archive, staging, staging_path=buffer.value)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_portable_validator_rejects_extra_roots_wrong_types_and_unsafe_paths(self):
@@ -3056,11 +3078,9 @@ class UserFacingDocumentationContractTests(unittest.TestCase):
         self.assertIn("未签名", self.guide)
 
     def test_voice_routing_and_real_input_check_are_clear(self):
-        for text in (self.guide, self.landing):
-            self.assertIn("CABLE Input", text)
-            self.assertIn("CABLE Output", text)
-            self.assertIn("记事本", text)
-        self.assertIn("VibeNano写入声音的一侧", self.guide)
+        for phrase in ("CABLE Input", "CABLE Output", "记事本", "写入声音的一侧"):
+            self.assertIn(phrase, self.guide)
+        self.assertIn("[详细使用说明](apps/windows/rc003/README.md)", self.landing)
         self.assertIn("输入法读取麦克风的一侧", self.guide)
         for provider in ("搜狗", "微信", "豆包"):
             self.assertIn(provider, self.guide)
@@ -3077,9 +3097,9 @@ class UserFacingDocumentationContractTests(unittest.TestCase):
 
     def test_landing_page_identifies_the_formal_version(self):
         version = _formal_version_from_landing(self.landing)
-        self.assertIn(f"当前正式版为 **{version}**", self.landing)
-        self.assertIn(f"RemoteMicRC003-{version}-portable-unsigned.zip", self.landing)
-        self.assertIn("VibeNano win版 <版本号>.exe", self.landing)
+        self.assertEqual(version, _VERSION_PATH.read_text(encoding="ascii").strip())
+        self.assertIn(f"VibeNano-{version}-portable-unsigned.zip", self.landing)
+        self.assertIn(f"VibeNano win版 {version}.exe", self.landing)
 
 
 class RootDocumentConsistencyTests(unittest.TestCase):
@@ -3096,17 +3116,17 @@ class RootDocumentConsistencyTests(unittest.TestCase):
     def test_root_readme_does_not_lump_windows_in_with_planned_research(self):
         self.assertIn("小米遥控器2 Pro", self.root_readme_text)
         self.assertIn("谷歌 Chromecast 遥控器", self.root_readme_text)
-        self.assertIn("[开发者文档](apps/windows/rc003/README.md)", self.root_readme_text)
+        self.assertIn("[源码构建](docs/BUILDING.md)", self.root_readme_text)
 
     def test_root_readme_places_the_admin_workaround_in_usage_limits(self):
-        self.assertIn("未就绪提示，按页面说明处理", self.root_readme_text)
-        self.assertIn("[使用说明](apps/windows/rc003/README.md)", self.root_readme_text)
+        self.assertIn("[详细使用说明](apps/windows/rc003/README.md)", self.root_readme_text)
+        self.assertIn("[详细使用说明](apps/windows/rc003/README.md)", self.root_readme_text)
         windows_readme = _README_PATH.read_text(encoding="utf-8")
         self.assertIn("管理员按键组件", windows_readme)
         self.assertIn("UAC", windows_readme)
 
     def test_root_readme_documents_required_configuration(self):
-        for phrase in ("CABLE Input", "CABLE Output", "语音按键", "[使用说明](apps/windows/rc003/README.md)"):
+        for phrase in ("Fun-ASR-Nano", "语音", "[详细使用说明](apps/windows/rc003/README.md)"):
             self.assertIn(phrase, self.root_readme_text)
 
     def test_third_party_notices_does_not_falsely_deny_all_vbcable_reference(self):
@@ -3153,8 +3173,8 @@ class RootDocumentConsistencyTests(unittest.TestCase):
         # A local test build can be newer than the public download.
         windows_readme_text = _README_PATH.read_text(encoding="utf-8")
         version = _formal_version_from_landing(self.root_readme_text)
-        self.assertIn(f"RemoteMicRC003-{version}-portable-unsigned.zip", self.root_readme_text)
-        self.assertIn("下载页面与最新版说明", windows_readme_text)
+        self.assertIn(f"VibeNano-{version}-portable-unsigned.zip", self.root_readme_text)
+        self.assertIn("https://github.com/WuYuStar/vibenano/releases", windows_readme_text)
 
 
 _CJK_CHAR_RE = r"[　-〿぀-ヿ㐀-鿿＀-￯]"
@@ -3242,9 +3262,9 @@ class PrereleaseDownloadInstructionsContractTests(unittest.TestCase):
         guide = _README_PATH.read_text(encoding="utf-8")
         version = _formal_version_from_landing(landing)
         self.assertIn(f"/releases/tag/v{version}", landing)
-        self.assertIn(f"RemoteMicRC003-{version}-portable-unsigned.zip", landing)
+        self.assertIn(f"VibeNano-{version}-portable-unsigned.zip", landing)
         self.assertIn("SHA256SUMS.txt", landing)
-        self.assertIn("https://github.com/ZSTDJan/windows-remote-mic-app/releases", guide)
+        self.assertIn("https://github.com/WuYuStar/vibenano/releases", guide)
         self.assertNotIn("miaomiaozii/windows-remote-mic-app", guide)
 
 
@@ -3263,7 +3283,7 @@ class ApplicationUpdateDocumentationContractTests(unittest.TestCase):
     def test_manual_update_never_auto_replaces_the_running_copy(self):
         guide = _README_PATH.read_text(encoding="utf-8")
         landing = _ROOT_README_PATH.read_text(encoding="utf-8")
-        self.assertIn("[使用说明](apps/windows/rc003/README.md)", landing)
+        self.assertIn("[详细使用说明](apps/windows/rc003/README.md)", landing)
         self.assertIn("检查更新", guide)
         self.assertIn("不会自动运行下载文件或覆盖当前文件夹", guide)
         self.assertIn("把新 ZIP 解压到新文件夹", guide)
@@ -3275,14 +3295,14 @@ class PortableAndInstallerFlowContractTests(unittest.TestCase):
     def test_portable_start_and_exit_are_usable(self):
         guide = _README_PATH.read_text(encoding="utf-8")
         self.assertIn("免安装 ZIP", guide)
-        self.assertIn("文件夹顶层的VibeNano EXE", guide)
+        self.assertRegex(guide, r"VibeNano win版.*?\.exe")
         self.assertIn("不要只把 EXE 单独取出来", _normalize_whitespace(guide))
         self.assertIn("通知区域", guide)
         self.assertIn("完全退出", guide)
 
     def test_user_data_survives_portable_folder_deletion(self):
         guide = _README_PATH.read_text(encoding="utf-8")
-        self.assertIn(r"%LOCALAPPDATA%\RemoteMic\RC003", guide)
+        self.assertIn(r"%LOCALAPPDATA%\VibeNano\RC003", guide)
         self.assertIn("不会自动删除这里的数据", guide)
         self.assertIn("移动或删除", guide)
         self.assertIn("随 Windows 启动", guide)
@@ -3309,7 +3329,7 @@ class WindowsPrereleaseAssetScopeContractTests(unittest.TestCase):
     def test_download_instructions_name_only_this_release_assets(self):
         landing = _ROOT_README_PATH.read_text(encoding="utf-8")
         version = _formal_version_from_landing(landing)
-        self.assertIn(f"RemoteMicRC003-{version}-portable-unsigned.zip", landing)
+        self.assertIn(f"VibeNano-{version}-portable-unsigned.zip", landing)
         self.assertIn("SHA256SUMS.txt", landing)
         self.assertNotIn("每个预发行版恰好包含以下三个文件", landing)
 

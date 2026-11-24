@@ -1,8 +1,9 @@
 """Configuration persistence with an enforced privacy contract.
 
-Config root: ``%LOCALAPPDATA%\\VibeNano\\RC003`` (falls back to the
-user's home directory if ``LOCALAPPDATA`` is unset, e.g. when unit testing on
-non-Windows). Two JSON files live there: ``config.json`` (tuning/behavior) and
+Frozen portable builds keep all mutable data below ``data`` beside the main
+executable. Source runs retain the original ``%LOCALAPPDATA%\\VibeNano\\RC003``
+location unless ``VIBENANO_PORTABLE_ROOT`` explicitly selects a portable root.
+Two JSON files live there: ``config.json`` (tuning/behavior) and
 ``key_bindings.json`` (per-button actions plus the voice hotkey).
 
 Hard privacy rule: neither file may ever contain a real Bluetooth address,
@@ -21,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +31,8 @@ from typing import Any, Dict, List, Union
 APP_ID = "VibeNano"
 LEGACY_APP_ID = "RemoteMic"
 PRODUCT_ID = "RC003"
+PORTABLE_ROOT_ENV = "VIBENANO_PORTABLE_ROOT"
+PORTABLE_DATA_DIRECTORY = "data"
 
 CONFIG_FILENAME = "config.json"
 KEY_BINDINGS_FILENAME = "key_bindings.json"
@@ -136,14 +140,72 @@ def _settings_load_issue(filename: str, error: Exception) -> SettingsLoadIssue:
     return SettingsLoadIssue(filename, type(error).__name__, message)
 
 
+def _frozen_program_root() -> Path:
+    """Return the portable package root for the main or bundled helper exe."""
+
+    from . import product_identity
+
+    root = Path(sys.executable).resolve().parent
+    if root.name == product_identity.WINDOWS_RUNTIME_DIRECTORY_NAME:
+        root = root.parent
+    return root
+
+
+def portable_program_root() -> Path:
+    """Resolve an explicit or frozen portable root without using AppData."""
+
+    override = os.environ.get(PORTABLE_ROOT_ENV, "").strip()
+    if override:
+        root = Path(override)
+        if not root.is_absolute():
+            raise ValueError(f"{PORTABLE_ROOT_ENV} must be an absolute path")
+        return root.resolve()
+    if getattr(sys, "frozen", False):
+        return _frozen_program_root()
+    raise ValueError("portable data root is only available in frozen builds")
+
+
+def data_root() -> Path:
+    """Root for every mutable VibeNano-owned data directory."""
+
+    from . import dev_session
+    if dev_session.is_isolated():
+        return dev_session.isolated_root()
+    if os.environ.get(PORTABLE_ROOT_ENV, "").strip() or getattr(sys, "frozen", False):
+        return portable_program_root() / PORTABLE_DATA_DIRECTORY
+    base = os.environ.get("LOCALAPPDATA") or str(Path.home())
+    return Path(base) / APP_ID
+
+
+def configure_portable_environment() -> None:
+    """Keep Qt caches and application temporary files beside the executable.
+
+    This deliberately does not change LOCALAPPDATA/APPDATA: voice-program
+    discovery still needs the real Windows locations. The portable override is
+    inherited by one-shot helper children and by frozen multiprocessing children.
+    """
+
+    if not getattr(sys, "frozen", False) and not os.environ.get(PORTABLE_ROOT_ENV, "").strip():
+        return
+    root = portable_program_root()
+    data = root / PORTABLE_DATA_DIRECTORY
+    cache = data / "cache"
+    temporary = data / "tmp"
+    cache.mkdir(parents=True, exist_ok=True)
+    temporary.mkdir(parents=True, exist_ok=True)
+    os.environ[PORTABLE_ROOT_ENV] = str(root)
+    os.environ.setdefault("QML_DISK_CACHE_PATH", str(cache / "qmlcache"))
+    os.environ.setdefault("QSG_DISK_CACHE_PATH", str(cache / "qtpipelinecache"))
+    os.environ.setdefault("XDG_CACHE_HOME", str(cache))
+    os.environ["TEMP"] = str(temporary)
+    os.environ["TMP"] = str(temporary)
+
+
 def config_root() -> Path:
     from . import dev_session
     if dev_session.is_isolated():
         return dev_session.isolated_root()
-    base = os.environ.get("LOCALAPPDATA")
-    if not base:
-        base = str(Path.home())
-    return Path(base) / APP_ID / PRODUCT_ID
+    return data_root() / PRODUCT_ID
 
 
 def legacy_config_root() -> Path:

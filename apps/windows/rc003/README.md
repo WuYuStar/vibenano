@@ -4,19 +4,19 @@
 
 **[VibeNano 下载页面与说明](https://github.com/WuYuStar/vibenano)** · [VibeNano 版本下载](https://github.com/WuYuStar/vibenano/releases)
 
-**当前源码状态：** 1.0.109 发布版，软件名称统一为 VibeNano，数据目录改为 `%LOCALAPPDATA%\VibeNano\RC003`。首次启动兼容迁移旧设置与已下载的 Nano 模型；权限登记和设备缓存也使用 VibeNano 目录。下载见项目首页；1.0.107 历史公开附件不变。
+**当前源码状态：** 1.1.3 纯便携修改版。配置、日志、模型、缓存和临时文件统一位于主程序旁的 `data` 目录；录音动画修复了 Windows 11 下透明分层窗口不可见的问题，并保留后台事件驱动与低轮询日志优化。
 
 ## 下载与升级
 
 - 系统要求：64 位 Windows 10 1809 或更高版本。开发环境为 Windows 11 23H2，较早版本的兼容性尚未全面验证。
-- 使用免安装 ZIP，完整解压到新文件夹，再运行文件夹顶层的无线麦 EXE；不要只把 EXE 单独取出来。
+- 使用免安装 ZIP，完整解压到新文件夹，再运行文件夹顶层的 `VibeNano win版 <版本号>.exe`（VibeNano EXE）；不要只把 EXE 单独取出来。
 - 升级前从通知区域选择“完全退出”，把新 ZIP 解压到新文件夹，再运行新版。同机同一 Windows 账户下自动沿用原配置。
 - 程序未签名，Windows 可能显示安全提示。请从本仓库下载，并核对同次发布的 `SHA256SUMS.txt`。
 
 核对下载文件：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\RemoteMicRC003-<版本号>-portable-unsigned.zip
+Get-FileHash -Algorithm SHA256 .\VibeNano-<版本号>-portable-unsigned.zip
 ```
 
 结果应与清单中同名文件的哈希一致。
@@ -90,7 +90,7 @@ Get-FileHash -Algorithm SHA256 .\RemoteMicRC003-<版本号>-portable-unsigned.zi
 1. 从托盘完全退出旧进程，再打开桌面的“无线麦 当前源码版”。
 2. 在“语音”中选择“中英混合识别 (Fun-ASR-Nano)”。本机已经准备好模型；新电脑在“本地模型”点击下载，可查看进度、暂停/继续和失败重试。
 3. 光标放到文字框，按住话筒说话，松开后输出；Chromecast也支持开关型。第一次使用需加载模型，后续复用进程；退出或切换到外部输入法时释放。
-4. “识别性能”提供CPU线程数1/2/4/8。模型固定为f16编码器＋Q8解码器及FSMN VAD，总约1.28GB，缓存在`%LOCALAPPDATA%\RemoteMic\RC003\models\fun-asr-nano`，不包含在应用包中。
+4. “识别性能”提供CPU线程数1/2/4/8。模型固定为f16编码器＋Q8解码器及FSMN VAD，总约1.28GB，缓存在主程序旁的`data\RC003\models\fun-asr-nano`，不包含在应用包中。
 
 支持中文夹英文，标点和停顿表达由模型决定；不承诺每次完全正确。原生组件使用AVX2/FMA/F16C，已在本机i5-1340P验证，旧电脑兼容性待测。
 
@@ -193,16 +193,17 @@ Chatterfly：确认程序已运行且没有另一段录音；仍失败时导出�
 用户配置和日志位于：
 
 ```text
-%LOCALAPPDATA%\RemoteMic\RC003
+data\RC003
 ```
 
 本地识别模型缓存位于：
 
 ```text
-%LOCALAPPDATA%\RemoteMic\RC003\models\faster-whisper
+data\RC003\models
 ```
 
-- 同机同一 Windows 账户下升级会沿用原设置和已下载模型。
+- 整个程序目录可以一起移动；请勿只移动 EXE 或 `data` 中的一部分。
+- 程序目录必须可写，不要放在需要管理员写入的 Program Files 目录。
 - 按键方案的副本和导出文件会包含预设文字、程序完整路径，请注意隐私。
 - 旧版不识别新增的“输入文字”“打开程序”动作；回退时使用添加这些动作前的配置备份。
 - 删除免安装程序文件夹不会自动删除这里的数据。若开启过“随 Windows 启动”，移动或删除程序前先关闭该选项。

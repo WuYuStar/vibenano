@@ -507,7 +507,7 @@ ApplicationWindow {
                     objectName: "openDownloadedApplicationUpdateButton"
                     visible: SettingsController.applicationUpdateState === "downloaded"
                     tokens: window.tokens
-                    text: qsTr("打开桌面")
+                    text: qsTr("打开下载目录")
                     highlighted: true
                     onClicked: {
                         if (SettingsController.openDownloadedApplicationUpdate())
@@ -785,7 +785,9 @@ ApplicationWindow {
 
     Timer {
         objectName: "voiceActivityRefreshTimer"
-        interval: 200
+        // Live in-process voice events arrive directly from the bridge. This
+        // slow file poll is only a legacy/recovery fallback, not the animation path.
+        interval: 2000
         repeat: true
         running: SettingsController.bridgeRunning && !window.applicationExitInProgress
         onTriggered: SettingsController.refreshVoiceActivity()
@@ -807,7 +809,8 @@ ApplicationWindow {
     Timer {
         id: windowRestoreRequestTimer
         objectName: "windowRestoreRequestTimer"
-        interval: 150
+        // A duplicate launch should restore promptly, without needless disk polling.
+        interval: 500
         repeat: true
         running: true
         onTriggered: SettingsController.pollWindowRestoreRequest()

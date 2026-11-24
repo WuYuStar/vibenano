@@ -101,6 +101,7 @@ import os
 import sys
 import threading
 import time
+import weakref
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
@@ -663,6 +664,7 @@ def _load_qt_classes() -> dict:
         )
         from PySide6.QtGui import QIcon
         from PySide6.QtQml import QQmlApplicationEngine, qmlRegisterSingletonInstance
+        from PySide6.QtQuick import QQuickWindow, QSGRendererInterface
         from PySide6.QtQuickControls2 import QQuickStyle
         from PySide6.QtWidgets import QApplication
     except ImportError as exc:
@@ -1210,6 +1212,7 @@ def _load_qt_classes() -> dict:
         remoteBatteryChanged = Signal()
         voiceRuntimeStatusChanged = Signal()
         voiceActivityChanged = Signal()
+        voiceActivitySnapshotReady = Signal(object)
         bridgeLaunchPhaseChanged = Signal()
         bridgeLaunchElapsedSecondsChanged = Signal()
         bridgeRestartRecommendedChanged = Signal()
@@ -1322,6 +1325,19 @@ def _load_qt_classes() -> dict:
             ] = None,
         ) -> None:
             super().__init__(parent)
+            self.voiceActivitySnapshotReady.connect(
+                self._set_voice_activity_status
+            )
+            controller_ref = weakref.ref(self)
+
+            def forward_voice_activity(status) -> None:
+                controller = controller_ref()
+                if controller is not None:
+                    controller.voiceActivitySnapshotReady.emit(status)
+
+            self._voice_activity_unsubscribe = (
+                bridge_launcher.subscribe_voice_activity(forward_voice_activity)
+            )
             self._model = model
             self._available_mapping_app_labels: Optional[set[str]] = None
             self._background_task_runner = background_task_runner
@@ -1840,6 +1856,7 @@ def _load_qt_classes() -> dict:
         def shutdownBackgroundTasks(self) -> bool:
             """Stop accepting background results and bounded-wait for workers."""
 
+            self._voice_activity_unsubscribe()
             with self._background_threads_lock:
                 self._background_shutdown_event.set()
                 threads = list(self._background_threads)
@@ -2604,6 +2621,7 @@ def _load_qt_classes() -> dict:
             self._bridge_connection_state = value
             self.bridgeConnectionStateChanged.emit()
 
+        @Slot(object)
         def _set_voice_activity_status(self, status) -> None:
             # This indicator consumes only runtime metadata, never microphone
             # samples or editor text. Stale/foreign/disconnected sessions hide it.
@@ -9074,7 +9092,7 @@ def _load_qt_classes() -> dict:
 
             release = self._application_update_release
             package_kind = self._application_update_package_kind()
-            desktop = QStandardPaths.writableLocation(QStandardPaths.DesktopLocation)
+            download_destination = self._config_root / "downloads"
             cancel_event = threading.Event()
             self._application_update_download_cancel_event = cancel_event
             self._application_update_download_busy = True
@@ -9111,12 +9129,8 @@ def _load_qt_classes() -> dict:
                         cancel_event=cancel_event,
                         progress_callback=report_progress,
                     )
-                    if not desktop:
-                        raise application_update.ApplicationUpdateError(
-                            "desktop_unavailable", "无法找到桌面，更新包保留在下载缓存中，请稍后重试。"
-                        )
                     result = application_update.save_update_to_desktop(
-                        result, Path(desktop), cancel_event=cancel_event
+                        result, download_destination, cancel_event=cancel_event
                     )
                     payload = (True, result)
                 except application_update.ApplicationUpdateCancelled as exc:
@@ -9199,17 +9213,17 @@ def _load_qt_classes() -> dict:
             self._application_update_download_path = str(result.path)
             if result.package_kind is application_update.PackageKind.INSTALLER:
                 self._application_update_message = (
-                    "更新包已保存到桌面并通过校验。请先完全退出VibeNano，再在文件夹中"
+                    "更新包已保存到便携数据目录并通过校验。请先完全退出VibeNano，再在文件夹中"
                     "手动运行安装器；程序不会自动安装。"
                 )
             else:
                 self._application_update_message = (
-                    "便携版已保存到桌面并通过校验。请先完全退出当前版本，再解压到"
+                    "便携版已保存到便携数据目录并通过校验。请先完全退出当前版本，再解压到"
                     "新的文件夹使用；程序不会覆盖现有目录。"
                 )
             self._set_error_message("")
             self._set_status_message(
-                "更新包已保存到桌面并通过校验。", self._DEVICE_PAGE_INDEX
+                "更新包已保存到便携数据目录并通过校验。", self._DEVICE_PAGE_INDEX
             )
             self.applicationUpdateChanged.emit()
 
@@ -10450,6 +10464,8 @@ def _load_qt_classes() -> dict:
         "QGuiApplication": QApplication,
         "QIcon": QIcon,
         "QQmlApplicationEngine": QQmlApplicationEngine,
+        "QQuickWindow": QQuickWindow,
+        "QSGRendererInterface": QSGRendererInterface,
         "QQuickStyle": QQuickStyle,
         "QUrl": QUrl,
         "Qt": Qt,
@@ -10481,6 +10497,7 @@ def run_settings_window(
     directory) - never silently opens a blank/broken window.
     """
 
+    config.configure_portable_environment()
     classes = _load_qt_classes()
     QGuiApplication = classes["QGuiApplication"]
     QIcon = classes["QIcon"]
@@ -10499,6 +10516,22 @@ def run_settings_window(
     # fallback, not native WinUI3) on non-Windows hosts too, which is what
     # this candidate's offscreen render/screenshot step below relies on.
     QQuickStyle.setStyle("FluentWinUI3")
+    # VoiceActivityOverlay uses a transparent click-through tool window
+    # (Qt.Tool | Qt.WindowTransparentForInput -> WS_EX_LAYERED + LWA_ALPHA).
+    # Under Qt 6.11's default D3D11 RHI on Windows 11, that layered HWND
+    # composites as fully transparent; the software scenegraph backend uses
+    # UpdateLayeredWindowIndirect so per-pixel alpha and animations render.
+    QQuickWindow = classes.get("QQuickWindow")
+    QSGRendererInterface = classes.get("QSGRendererInterface")
+    if (
+        sys.platform == "win32"
+        and QQuickWindow is not None
+        and QSGRendererInterface is not None
+        and QGuiApplication.instance() is None
+        and not os.environ.get("QT_QUICK_BACKEND")
+        and not os.environ.get("QSG_RHI_BACKEND")
+    ):
+        QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.Software)
 
     app = QGuiApplication.instance() or QGuiApplication(sys.argv)
     _apply_application_identity(app)

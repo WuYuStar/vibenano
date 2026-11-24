@@ -191,7 +191,7 @@ _ORDINARY_MIC_RELEASE_GUARD_SECONDS = 0.12
 _ORDINARY_MIC_SOURCE_STALE_SECONDS = 2.0
 _ORDINARY_MIC_MAX_SECONDS = 10.0
 _KEY_DETECTION_SUPPRESSION_MAX_SECONDS = 2.0
-_RUNTIME_STATUS_HEARTBEAT_SECONDS = 5.0
+_RUNTIME_STATUS_HEARTBEAT_SECONDS = 10.0
 _VOICE_HOLD_SAFETY_SECONDS = 120.0
 _VOICE_KEY_PHYSICALIZER_RETRY_SECONDS = 1.0
 _VOICE_KEY_PHYSICALIZER_DEGRADED_RETRY_WINDOW_SECONDS = 10.0
@@ -513,6 +513,7 @@ class RC003App:
                 release_inputs=self._release_chromecast_inputs,
                 route_edge=self._route_chromecast_edge,
                 resume_input=self._resume_chromecast_input,
+                telemetry_enabled=lambda: self._diagnostic_trace.enabled,
             )
         )
 
@@ -881,6 +882,7 @@ class RC003App:
                     voice_runtime_provider=self._runtime_voice_provider,
                     voice_runtime_updated_at=self._runtime_voice_updated_at,
                     battery_level=self._runtime_battery_level,
+                    on_status=bridge_launcher.publish_voice_activity,
                 )
             except (OSError, ValueError):
                 self._logger.exception(

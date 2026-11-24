@@ -6,12 +6,13 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from ovb_rc003 import bridge_runtime_status as status, qt_settings_app
+from ovb_rc003 import bridge_launcher, bridge_runtime_status as status, qt_settings_app
 from tests import test_qt_settings_app
 
 
@@ -87,6 +88,125 @@ class VoiceActivityControllerTests(unittest.TestCase):
             c.refreshVoiceActivity()
             self.assertEqual(c.voiceActivityState, "")
             self.assertEqual(read.call_count, 1)
+
+    def test_direct_bridge_event_updates_animation_without_file_polling(self):
+        c = self.controller
+        with mock.patch.object(status, "read_status") as read:
+            bridge_launcher.publish_voice_activity(self.live)
+            self.assertEqual(c.voiceActivityState, "listening")
+            bridge_launcher.publish_voice_activity(
+                replace(self.live, voice_active=False, voice_runtime_state="success")
+            )
+            self.assertEqual(c.voiceActivityState, "")
+            read.assert_not_called()
+
+    def test_cross_thread_bridge_event_updates_animation_on_gui_thread(self):
+        c = self.controller
+        worker = threading.Thread(
+            target=bridge_launcher.publish_voice_activity,
+            args=(self.live,),
+        )
+        worker.start()
+        worker.join(timeout=2.0)
+        self.assertFalse(worker.is_alive())
+        app = test_qt_settings_app.QCoreApplication.instance()
+        until = time.monotonic() + 1.0
+        while c.voiceActivityState != "listening" and time.monotonic() < until:
+            if app is not None:
+                app.processEvents()
+            time.sleep(0.01)
+        self.assertEqual(c.voiceActivityState, "listening")
+
+
+class VoiceActivityGraphicsApiTests(unittest.TestCase):
+    def _run_with_env(self, env_updates, *, platform="win32"):
+        calls = []
+
+        class _FakeApp:
+            def __init__(self, argv=None):
+                pass
+
+            @staticmethod
+            def instance():
+                return None
+
+            def exec(self):
+                return 0
+
+        class _FakeEngine:
+            def addImportPath(self, path):
+                pass
+
+            def load(self, url):
+                pass
+
+            def rootObjects(self):
+                return [object()]
+
+        class _FakeQQuickWindow:
+            @staticmethod
+            def setGraphicsApi(api):
+                calls.append(api)
+
+        class _FakeQSGRendererInterface:
+            class GraphicsApi:
+                Software = "Software"
+
+        class _FakeController:
+            def __init__(self, *args, **kwargs):
+                self._settings_window_hwnd = 0
+                self.trayStateChanged = mock.Mock()
+
+            def _tray_icon_state(self):
+                return "idle"
+
+            def shutdownForProcessExit(self):
+                return True
+
+        fake_classes = {
+            "QGuiApplication": _FakeApp,
+            "QIcon": lambda path=None: object(),
+            "QQmlApplicationEngine": _FakeEngine,
+            "QQuickWindow": _FakeQQuickWindow,
+            "QSGRendererInterface": _FakeQSGRendererInterface,
+            "QQuickStyle": mock.Mock(),
+            "QUrl": mock.Mock(fromLocalFile=lambda path: path),
+            "qmlRegisterSingletonInstance": lambda *args, **kwargs: None,
+            "ButtonMappingModel": lambda: object(),
+            "SettingsController": _FakeController,
+            "DiagnosticsController": lambda *args, **kwargs: object(),
+        }
+        clean_env = dict(os.environ)
+        clean_env.pop("QT_QUICK_BACKEND", None)
+        clean_env.pop("QSG_RHI_BACKEND", None)
+        clean_env.update(env_updates)
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.dict(os.environ, clean_env, clear=True), \
+                 mock.patch.object(qt_settings_app.sys, "platform", platform), \
+                 mock.patch.object(qt_settings_app.config, "configure_portable_environment"), \
+                 mock.patch.object(qt_settings_app.config, "config_root", return_value=Path(directory)), \
+                 mock.patch.object(qt_settings_app, "_load_qt_classes", return_value=fake_classes), \
+                 mock.patch.object(qt_settings_app, "_connect_application_exit"), \
+                 mock.patch.object(qt_settings_app, "_apply_application_identity"), \
+                 mock.patch.object(qt_settings_app, "_apply_application_icon"), \
+                 mock.patch.object(qt_settings_app, "_settings_window_handle", return_value=0), \
+                 mock.patch.object(qt_settings_app, "_mark_settings_window_for_activation"), \
+                 mock.patch.object(qt_settings_app, "_shutdown_diagnostics_workers"), \
+                 mock.patch.object(qt_settings_app.window_chrome_windows, "apply_settings_window_chrome"), \
+                 mock.patch.object(qt_settings_app.single_instance, "register_settings_window_restore_event"), \
+                 mock.patch.object(qt_settings_app.single_instance, "release_settings_window_restore_event"), \
+                 mock.patch.object(qt_settings_app.bridge_launcher, "stop_in_process_bridge", return_value=True), \
+                 mock.patch.object(qt_settings_app.element_navigation_control_windows, "shutdown_element_navigation"), \
+                 mock.patch.object(qt_settings_app.audio_playback, "cleanup_retained_portaudio_test_resources"):
+                self.assertEqual(qt_settings_app.run_settings_window(), 0)
+        return calls
+
+    def test_windows_defaults_to_software_quick_api_for_layered_overlay(self):
+        self.assertEqual(self._run_with_env({}), ["Software"])
+
+    def test_explicit_backend_override_is_respected(self):
+        self.assertEqual(self._run_with_env({"QT_QUICK_BACKEND": "d3d11"}), [])
+        self.assertEqual(self._run_with_env({"QSG_RHI_BACKEND": "opengl"}), [])
 
 
 _NATIVE_PROBE = r'''
@@ -215,7 +335,7 @@ current = [s.BridgeRuntimeStatus(
     voice_runtime_provider=controller._voice_program_settings['provider'],
     **vars(controller._current_runtime_identity))]
 def wait_for(predicate):
-    until = time.monotonic() + 1.5
+    until = time.monotonic() + 3.0
     while not predicate() and time.monotonic() < until:
         app.processEvents()
         time.sleep(0.01)

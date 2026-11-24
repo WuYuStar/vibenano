@@ -320,6 +320,9 @@ class ShutdownDiagnosticsTests(unittest.TestCase):
                     with mock.patch.object(system_evidence, '_environment', return_value=result):
                         system_evidence._collect_exit(client.identity.generation, 4, 123, 0xc0000005, 1000)
                 system_evidence._crash_unavailable('b'*64, 'queue_full')
+                # This case verifies retained evidence, not disk flush latency.
+                # Drain the known report workload before the bounded export.
+                self.assertTrue(handler._report_writer.flush(timeout=5))
                 destination = root/'export.zip'
                 self.assertEqual(log_export.export_logs(destination, root=root).outcome, 'exported')
                 with zipfile.ZipFile(destination) as archive:

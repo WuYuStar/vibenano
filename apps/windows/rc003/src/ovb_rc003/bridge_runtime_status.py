@@ -33,6 +33,9 @@ _SCOPED_STATUS_FILENAME_TEMPLATE = "bridge-runtime-status-{scope}.json"
 _STATUS_SCOPE_UNSET = object()
 _default_status_scope: object | str = _STATUS_SCOPE_UNSET
 _default_status_scope_lock = threading.Lock()
+_STATUS_IO_LOCK = threading.RLock()
+_STATUS_IO_ATTEMPTS = 4
+_STATUS_IO_RETRY_DELAY_SECONDS = 0.01
 FAILED_RAW_INPUT_STATES = frozenset(
     {
         "unavailable",
@@ -270,6 +273,7 @@ def publish_status(
     battery_level: Optional[int] = None,
     session_id: Optional[int] = None,
     now: Callable[[], float] = time.time,
+    on_status: Optional[Callable[[BridgeRuntimeStatus], None]] = None,
 ) -> BridgeRuntimeStatus:
     resolved_pid = os.getpid() if pid is None else int(pid)
     if resolved_pid <= 0:
@@ -309,50 +313,65 @@ def publish_status(
     path = status_path(config_root, session_id=session_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        temporary.write_text(
-            json.dumps(
-                {
-                    "schema": SCHEMA_VERSION,
-                    "state": status.state.value,
-                    "pid": status.pid,
-                    "updated_at": status.updated_at,
-                    "app_version": status.app_version,
-                    "runtime_kind": status.runtime_kind,
-                    "package_name": status.package_name,
-                    "runtime_id": status.runtime_id,
-                    "raw_input_state": status.raw_input_state,
-                    "hid_tap_state": status.hid_tap_state,
-                    "voice_key_physicalizer_state": (
-                        status.voice_key_physicalizer_state
-                    ),
-                    "last_button_at": status.last_button_at,
-                    "last_button_source": status.last_button_source,
-                    "voice_active": status.voice_active,
-                    "voice_runtime_state": status.voice_runtime_state,
-                    "voice_runtime_provider": status.voice_runtime_provider,
-                    "voice_runtime_updated_at": status.voice_runtime_updated_at,
-                    "battery_level": status.battery_level,
-                },
-                ensure_ascii=True,
-                sort_keys=True,
-            ),
-            encoding="utf-8",
-        )
-        os.replace(temporary, path)
-    finally:
-        try:
-            temporary.unlink()
-        except FileNotFoundError:
-            pass
+    payload = json.dumps(
+        {
+            "schema": SCHEMA_VERSION,
+            "state": status.state.value,
+            "pid": status.pid,
+            "updated_at": status.updated_at,
+            "app_version": status.app_version,
+            "runtime_kind": status.runtime_kind,
+            "package_name": status.package_name,
+            "runtime_id": status.runtime_id,
+            "raw_input_state": status.raw_input_state,
+            "hid_tap_state": status.hid_tap_state,
+            "voice_key_physicalizer_state": status.voice_key_physicalizer_state,
+            "last_button_at": status.last_button_at,
+            "last_button_source": status.last_button_source,
+            "voice_active": status.voice_active,
+            "voice_runtime_state": status.voice_runtime_state,
+            "voice_runtime_provider": status.voice_runtime_provider,
+            "voice_runtime_updated_at": status.voice_runtime_updated_at,
+            "battery_level": status.battery_level,
+        },
+        ensure_ascii=True,
+        sort_keys=True,
+    )
+    if on_status is not None:
+        on_status(status)
+    # A legacy UI can poll this file while the bridge replaces it. On Windows
+    # a reader can transiently prevent os.replace(), so coordinate in-process
+    # access and retry only the short sharing violation, not real I/O failures.
+    with _STATUS_IO_LOCK:
+        for attempt in range(_STATUS_IO_ATTEMPTS):
+            try:
+                temporary.write_text(payload, encoding="utf-8")
+                os.replace(temporary, path)
+                break
+            except PermissionError:
+                if attempt + 1 >= _STATUS_IO_ATTEMPTS:
+                    raise
+                time.sleep(_STATUS_IO_RETRY_DELAY_SECONDS * (attempt + 1))
+            finally:
+                try:
+                    temporary.unlink()
+                except FileNotFoundError:
+                    pass
     return status
 
 
 def _read_status_file(path: Path) -> Optional[BridgeRuntimeStatus]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
-        return None
+    with _STATUS_IO_LOCK:
+        for attempt in range(_STATUS_IO_ATTEMPTS):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                break
+            except PermissionError:
+                if attempt + 1 >= _STATUS_IO_ATTEMPTS:
+                    return None
+                time.sleep(_STATUS_IO_RETRY_DELAY_SECONDS * (attempt + 1))
+            except (OSError, UnicodeError, json.JSONDecodeError):
+                return None
     if not isinstance(payload, dict):
         return None
     schema = payload.get("schema")

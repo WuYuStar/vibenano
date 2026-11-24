@@ -52,6 +52,7 @@ HELPER_BUNDLE_RELATIVE_PATH = LEGACY_HELPER_BUNDLE_RELATIVE_PATH
 INSTALL_FLAG = "--install-task"
 UNINSTALL_FLAG = "--uninstall-task"
 INJECT_FLAG = "--inject"
+PORTABLE_ROOT_FLAG = "--portable-root"
 SELF_CHECK_FLAG = "--self-check"
 REQUEST_SID_FLAG = "--request-sid"
 TASK_EXECUTION_LIMIT = "PT30S"
@@ -1166,6 +1167,19 @@ def _lexical_absolute(path: Path) -> Path:
     return Path(os.path.abspath(os.fspath(path)))
 
 
+def _scheduled_task_arguments() -> str:
+    """Pass the package root explicitly to a scheduled portable helper."""
+
+    from . import config
+    try:
+        portable_root = config.portable_program_root()
+    except ValueError:
+        return INJECT_FLAG
+    return subprocess.list2cmdline(
+        [INJECT_FLAG, PORTABLE_ROOT_FLAG, str(portable_root)]
+    )
+
+
 def task_definition_xml(
     helper_path: Path,
     user_sid: str,
@@ -1176,6 +1190,7 @@ def task_definition_xml(
     expected_task_name = task_name or task_name_for_sid(sid)
     path_text = html.escape(str(_lexical_absolute(Path(helper_path))))
     sid_text = html.escape(sid)
+    arguments = _scheduled_task_arguments()
     return f"""<?xml version=\"1.0\" encoding=\"UTF-16\"?>
 <Task version=\"1.4\" xmlns=\"{TASK_XML_NAMESPACE}\">
   <RegistrationInfo>
@@ -1207,7 +1222,7 @@ def task_definition_xml(
   <Actions Context=\"Author\">
     <Exec>
       <Command>{path_text}</Command>
-      <Arguments>{INJECT_FLAG}</Arguments>
+      <Arguments>{html.escape(arguments)}</Arguments>
       <WorkingDirectory>{html.escape(str(_lexical_absolute(Path(helper_path)).parent))}</WorkingDirectory>
     </Exec>
   </Actions>
@@ -1349,7 +1364,7 @@ def validate_registered_task_xml(
             break
     return (
         os.path.normcase(command) == os.path.normcase(str(expected))
-        and arguments == INJECT_FLAG
+        and arguments == _scheduled_task_arguments()
         and os.path.normcase(working_directory)
         == os.path.normcase(str(expected.parent))
         and principal.casefold() == sid.casefold()
@@ -3230,10 +3245,18 @@ def helper_main(argv: Optional[Sequence[str]] = None) -> int:
     group.add_argument(UNINSTALL_FLAG, action="store_true")
     group.add_argument(INJECT_FLAG, action="store_true")
     group.add_argument(SELF_CHECK_FLAG, action="store_true")
+    parser.add_argument(PORTABLE_ROOT_FLAG)
     parser.add_argument(REQUEST_SID_FLAG)
     operation_failure_exit = HELPER_EXIT_VALIDATION_FAILED
     try:
         args = parser.parse_args(list(argv) if argv is not None else None)
+        from . import config
+        portable_root = getattr(args, PORTABLE_ROOT_FLAG[2:].replace("-", "_"))
+        if portable_root:
+            os.environ[config.PORTABLE_ROOT_ENV] = str(
+                Path(portable_root).resolve()
+            )
+        config.configure_portable_environment()
         if getattr(args, INSTALL_FLAG[2:].replace("-", "_")):
             operation_failure_exit = HELPER_EXIT_INSTALL_FAILED
             _run_serialized_helper_operation(

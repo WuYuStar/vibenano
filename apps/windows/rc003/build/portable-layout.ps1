@@ -247,9 +247,15 @@ function Assert-RC003PortableZip {
         )
         $stagingFiles = @(
             Get-ChildItem -LiteralPath $stagingRoot -Force -File -Recurse | ForEach-Object {
-                $relativePath = $_.FullName.Substring($stagingRoot.Length).TrimStart(
-                    $pathSeparators
-                ).Replace([System.IO.Path]::DirectorySeparatorChar, [char]47)
+                # Windows can enumerate a long path from an 8.3 staging alias.
+                # Component counts stay equal; string prefix lengths do not.
+                $rootDepth = $stagingRoot.Split(
+                    $pathSeparators, [System.StringSplitOptions]::RemoveEmptyEntries
+                ).Count
+                $segments = $_.FullName.Split(
+                    $pathSeparators, [System.StringSplitOptions]::RemoveEmptyEntries
+                )
+                $relativePath = [string]::Join("/", $segments[$rootDepth..($segments.Length - 1)])
                 [pscustomobject]@{
                     EntryName = "$TopLevelName/$relativePath"
                     FullName = $_.FullName

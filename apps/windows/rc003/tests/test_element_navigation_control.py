@@ -69,7 +69,7 @@ class ElementNavigationCommandTests(unittest.TestCase):
         state_index = command.index("--quicker-state-file")
         self.assertEqual(
             command[state_index + 1],
-            r"C:\LocalData\RemoteMic\RC003\quicker-navigation.json",
+            r"C:\LocalData\VibeNano\RC003\quicker-navigation.json",
         )
 
     def test_send_command_distinguishes_absent_delivered_and_failed(self):

@@ -190,11 +190,8 @@ def _read_pdb_identity(path, details):
 
 
 def _symbol_cache() -> Path:
-    root = os.environ.get("LOCALAPPDATA")
-    if not root:
-        raise TapError("hid_symbol_unavailable", detail="cache_root")
-    from .config import APP_ID
-    return Path(root) / APP_ID / "HidSymbols"
+    from .config import data_root
+    return data_root() / "HidSymbols"
 
 
 def _ensure_pdb(module: Path) -> Path:

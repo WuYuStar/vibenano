@@ -208,6 +208,27 @@ class TaskDefinitionTests(unittest.TestCase):
             )
         )
 
+    def test_portable_task_carries_the_package_root(self):
+        from ovb_rc003 import config
+
+        portable_root = str(Path.cwd() / "portable-root")
+        with mock.patch.dict(
+            "os.environ", {config.PORTABLE_ROOT_ENV: portable_root}
+        ):
+            xml = hid_elevation_windows.task_definition_xml(
+                self.helper, SID, task_name=self.task_name
+            )
+            self.assertIn("--portable-root", xml)
+            self.assertIn("portable-root", xml)
+            self.assertTrue(
+                hid_elevation_windows.validate_registered_task_xml(
+                    xml,
+                    helper_path=self.helper,
+                    user_sid=SID,
+                    task_name=self.task_name,
+                )
+            )
+
     def test_task_validation_accepts_only_one_empty_trigger_container(self):
         variants = (
             _with_empty_triggers(self.xml),
@@ -1230,7 +1251,7 @@ class InstalledHelperTests(unittest.TestCase):
                     frozen=True,
                     executable=str(executable),
                 ),
-                Path(raw) / "_internal" / hid_elevation_windows.HELPER_EXE_NAME,
+                Path(raw).resolve() / "_internal" / hid_elevation_windows.HELPER_EXE_NAME,
             )
 
     def test_versioned_distribution_uses_program_files_directory(self):
@@ -1243,7 +1264,7 @@ class InstalledHelperTests(unittest.TestCase):
                     frozen=True,
                     executable=str(executable),
                 ),
-                Path(raw) / "程序文件" / hid_elevation_windows.HELPER_EXE_NAME,
+                Path(raw).resolve() / "程序文件" / hid_elevation_windows.HELPER_EXE_NAME,
             )
 
     def test_unknown_frozen_executable_does_not_offer_a_helper(self):

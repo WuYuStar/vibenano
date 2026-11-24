@@ -266,6 +266,41 @@ _IN_PROCESS_COMMAND = ("<in-process-bridge>",)
 _in_process_lock = threading.Lock()
 _in_process_handle: Optional[_InProcessBridgeHandle] = None
 _in_process_restart_blocked = False
+_voice_activity_listeners_lock = threading.Lock()
+_voice_activity_listeners: Dict[object, Callable[[object], None]] = {}
+
+
+def publish_voice_activity(status: object) -> None:
+    """Deliver live voice state directly to in-process UI subscribers.
+
+    This is an event path, not a persistence operation. Listener failures are
+    isolated so a closing Qt window can never interrupt recording or status
+    heartbeat publication.
+    """
+
+    with _voice_activity_listeners_lock:
+        listeners = list(_voice_activity_listeners.values())
+    for listener in listeners:
+        try:
+            listener(status)
+        except Exception:
+            pass
+
+
+def subscribe_voice_activity(
+    listener: Callable[[object], None],
+) -> Callable[[], None]:
+    """Subscribe to direct voice events; return an idempotent unsubscribe."""
+
+    token = object()
+    with _voice_activity_listeners_lock:
+        _voice_activity_listeners[token] = listener
+
+    def unsubscribe() -> None:
+        with _voice_activity_listeners_lock:
+            _voice_activity_listeners.pop(token, None)
+
+    return unsubscribe
 
 
 def _run_in_process_bridge(handle: _InProcessBridgeHandle) -> None:

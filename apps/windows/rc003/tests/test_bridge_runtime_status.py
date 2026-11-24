@@ -537,6 +537,44 @@ class BridgeRuntimeStatusTests(unittest.TestCase):
                 pid=0,
             )
 
+    def test_live_callback_runs_even_if_windows_file_replace_is_busy(self):
+        callback = mock.Mock()
+        with mock.patch.object(
+            bridge_runtime_status.os, "replace", side_effect=PermissionError
+        ), mock.patch.object(bridge_runtime_status.time, "sleep"):
+            with self.assertRaises(PermissionError):
+                bridge_runtime_status.publish_status(
+                    self.root,
+                    bridge_runtime_status.BridgeConnectionState.CONNECTED,
+                    voice_active=True,
+                    on_status=callback,
+                )
+        callback.assert_called_once()
+        self.assertTrue(callback.call_args.args[0].voice_active)
+
+    def test_read_retries_a_transient_windows_sharing_violation(self):
+        bridge_runtime_status.publish_status(
+            self.root,
+            bridge_runtime_status.BridgeConnectionState.CONNECTED,
+            voice_active=True,
+        )
+        path = bridge_runtime_status.status_path(self.root)
+        original_read_text = Path.read_text
+        calls = []
+
+        def flaky_read_text(candidate, *args, **kwargs):
+            if candidate == path and not calls:
+                calls.append(candidate)
+                raise PermissionError
+            return original_read_text(candidate, *args, **kwargs)
+
+        with mock.patch.object(Path, "read_text", new=flaky_read_text), \
+                mock.patch.object(bridge_runtime_status.time, "sleep"):
+            written = bridge_runtime_status.read_status(self.root)
+        self.assertIsNotNone(written)
+        self.assertTrue(written.voice_active)
+        self.assertEqual(len(calls), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
