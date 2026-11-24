@@ -1130,6 +1130,29 @@ class ArgumentModeBypassTests(_ArgvRestoringTestCase):
         self.assertEqual(check_calls, [1])
         self.assertEqual(enter_calls, [])
 
+    def test_frozen_read_only_smoke_flags_never_create_portable_data_dir(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            executable = root / "VibeNano win版 1.1.3.exe"
+            main_module._qt_runtime_check = lambda: 0
+            for flag in ("--dry-run", "--qt-runtime-check", "--version", "--help"):
+                with self.subTest(flag=flag), mock.patch.dict(
+                    os.environ, {}, clear=False
+                ), mock.patch.object(
+                    sys, "frozen", True, create=True
+                ), mock.patch.object(
+                    sys, "executable", str(executable)
+                ):
+                    os.environ.pop(config.PORTABLE_ROOT_ENV, None)
+                    sys.argv = [str(executable), flag]
+                    if flag in ("--dry-run", "--qt-runtime-check"):
+                        with self.assertRaises(SystemExit) as ctx:
+                            main_module.main()
+                        self.assertEqual(ctx.exception.code, 0)
+                    else:
+                        main_module.main()
+                    self.assertFalse((root / "data").exists())
+
     def test_application_exit_request_never_enters_the_application_guard(self):
         enter_calls = self._assert_application_guard_unused()
         request_calls = []

@@ -3865,6 +3865,30 @@ class HelperMainTests(unittest.TestCase):
 
         self.assertEqual(result, hid_elevation_windows.HELPER_EXIT_VALIDATION_FAILED)
 
+    def test_frozen_self_check_never_creates_portable_data_dir(self):
+        import os
+
+        from ovb_rc003 import config
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            helper_exe = root / "程序文件" / "RemoteMicRC003HidHelper.exe"
+            with mock.patch.dict(os.environ, {}, clear=False), mock.patch.object(
+                sys, "frozen", True, create=True
+            ), mock.patch.object(
+                sys, "executable", str(helper_exe)
+            ), mock.patch.object(
+                hid_elevation_windows, "_self_check"
+            ) as check:
+                os.environ.pop(config.PORTABLE_ROOT_ENV, None)
+                result = hid_elevation_windows.helper_main(
+                    [hid_elevation_windows.SELF_CHECK_FLAG]
+                )
+
+            self.assertEqual(result, hid_elevation_windows.HELPER_EXIT_OK)
+            check.assert_called_once_with()
+            self.assertFalse((root / "data").exists())
+
 class HelperEntryPointTests(unittest.TestCase):
     def test_inject_mode_resolves_target_internally(self):
         with mock.patch.object(hid_elevation_windows, "_inject_once") as inject:

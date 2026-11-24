@@ -3256,7 +3256,8 @@ def helper_main(argv: Optional[Sequence[str]] = None) -> int:
             os.environ[config.PORTABLE_ROOT_ENV] = str(
                 Path(portable_root).resolve()
             )
-        config.configure_portable_environment()
+        if not getattr(args, SELF_CHECK_FLAG[2:].replace("-", "_")):
+            config.configure_portable_environment()
         if getattr(args, INSTALL_FLAG[2:].replace("-", "_")):
             operation_failure_exit = HELPER_EXIT_INSTALL_FAILED
             _run_serialized_helper_operation(
