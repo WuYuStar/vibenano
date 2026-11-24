@@ -456,14 +456,32 @@ a.binaries = [
 # directory. PATH may contain MySQL/Git DLLs with identical filenames but an
 # incompatible ABI; accepting those silently breaks all packaged HTTPS.
 python_tls_directory = Path(sys.base_prefix) / "DLLs"
-python_tls_names = {"libssl-3-x64.dll", "libcrypto-3-x64.dll"}
-for filename in python_tls_names:
-    if not (python_tls_directory / filename).is_file():
-        raise SystemExit(f"required CPython TLS library missing: {filename}")
-a.binaries = [entry for entry in a.binaries
-    if Path(entry[0]).name.casefold() not in python_tls_names]
-a.binaries.extend((filename, str(python_tls_directory / filename), "BINARY")
-                  for filename in sorted(python_tls_names))
+_tls_pairs = (
+    ("libssl-3.dll", "libcrypto-3.dll"),
+    ("libssl-3-x64.dll", "libcrypto-3-x64.dll"),
+)
+python_tls_names = next(
+    (
+        set(pair)
+        for pair in _tls_pairs
+        if all((python_tls_directory / filename).is_file() for filename in pair)
+    ),
+    None,
+)
+if python_tls_names is None:
+    raise SystemExit(
+        f"required CPython TLS library pair missing in {python_tls_directory}"
+    )
+all_tls_names = {name for pair in _tls_pairs for name in pair}
+a.binaries = [
+    entry
+    for entry in a.binaries
+    if Path(entry[0]).name.casefold() not in all_tls_names
+]
+a.binaries.extend(
+    (filename, str(python_tls_directory / filename), "BINARY")
+    for filename in sorted(python_tls_names)
+)
 
 
 # Some supplied CPython runtimes have an SSLContext policy PEM referenced
