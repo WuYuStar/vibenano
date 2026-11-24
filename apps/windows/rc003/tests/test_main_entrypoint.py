@@ -1004,6 +1004,8 @@ class DesktopModeRoutingTests(_ArgvRestoringTestCase):
                 ) as maintenance, mock.patch.object(
                     main_module, "_register_current_hid_helper_consumer"
                 ) as register, mock.patch.object(
+                    config, "configure_portable_environment"
+                ), mock.patch.object(
                     single_instance, "show_bridge_startup_blocked_notice"
                 ) as notice, mock.patch.object(settings_ui, "main") as settings_main:
                     main_module.main()

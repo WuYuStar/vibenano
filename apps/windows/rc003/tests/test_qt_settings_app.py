@@ -458,6 +458,7 @@ class SettingsControllerTests(unittest.TestCase):
             },
         )
         self._env_patch.start()
+        os.environ.pop(qt_settings_app.config.PORTABLE_ROOT_ENV, None)
         self._bridge_status_patch = mock.patch.object(
             qt_settings_app.single_instance,
             "bridge_instance_running",
@@ -9624,6 +9625,7 @@ class RunSettingsWindowShutdownCoverageTests(unittest.TestCase):
             },
         )
         self._env_patch.start()
+        os.environ.pop(qt_settings_app.config.PORTABLE_ROOT_ENV, None)
         qt_settings_app._diagnostics_shutdown_event.clear()
 
     def tearDown(self):

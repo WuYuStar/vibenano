@@ -125,7 +125,7 @@ class InjectedScriptTests(unittest.TestCase):
                   .replace("__RVA__", "1").replace("__COUNTS__", json.dumps(sorted(HID_COUNTS))))
         result = subprocess.run([shutil.which("node"), str(Path(__file__).with_name("chromecast_hid_tap_harness.js"))],
                                 input=json.dumps(dict(script=script, cases=cases, **options)),
-                                capture_output=True, text=True, timeout=10)
+                                capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 

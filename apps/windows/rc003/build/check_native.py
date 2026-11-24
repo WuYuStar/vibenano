@@ -135,6 +135,7 @@ def main() -> int:
     os.environ["PYTHONPATH"] = str(stage / "src")
     os.environ["RC003_DISABLE_LIVE_INPUT"] = "1"
     os.environ["RC003_ALLOW_LIVE_INPUT_TESTS"] = "0"
+    os.environ.pop("VIBENANO_PORTABLE_ROOT", None)
     verify_imports(stage, receipt)
     if not args.tests:
         return 0

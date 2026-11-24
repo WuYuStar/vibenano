@@ -109,7 +109,9 @@ class VoiceActivityControllerTests(unittest.TestCase):
         worker.start()
         worker.join(timeout=2.0)
         self.assertFalse(worker.is_alive())
-        app = test_qt_settings_app.QCoreApplication.instance()
+        from PySide6.QtCore import QCoreApplication
+
+        app = QCoreApplication.instance()
         until = time.monotonic() + 1.0
         while c.voiceActivityState != "listening" and time.monotonic() < until:
             if app is not None:
@@ -179,26 +181,36 @@ class VoiceActivityGraphicsApiTests(unittest.TestCase):
         clean_env = dict(os.environ)
         clean_env.pop("QT_QUICK_BACKEND", None)
         clean_env.pop("QSG_RHI_BACKEND", None)
+        clean_env.pop("VIBENANO_PORTABLE_ROOT", None)
         clean_env.update(env_updates)
         with tempfile.TemporaryDirectory() as directory:
-            with mock.patch.dict(os.environ, clean_env, clear=True), \
-                 mock.patch.object(qt_settings_app.sys, "platform", platform), \
-                 mock.patch.object(qt_settings_app.config, "configure_portable_environment"), \
-                 mock.patch.object(qt_settings_app.config, "config_root", return_value=Path(directory)), \
-                 mock.patch.object(qt_settings_app, "_load_qt_classes", return_value=fake_classes), \
-                 mock.patch.object(qt_settings_app, "_connect_application_exit"), \
-                 mock.patch.object(qt_settings_app, "_apply_application_identity"), \
-                 mock.patch.object(qt_settings_app, "_apply_application_icon"), \
-                 mock.patch.object(qt_settings_app, "_settings_window_handle", return_value=0), \
-                 mock.patch.object(qt_settings_app, "_mark_settings_window_for_activation"), \
-                 mock.patch.object(qt_settings_app, "_shutdown_diagnostics_workers"), \
-                 mock.patch.object(qt_settings_app.window_chrome_windows, "apply_settings_window_chrome"), \
-                 mock.patch.object(qt_settings_app.single_instance, "register_settings_window_restore_event"), \
-                 mock.patch.object(qt_settings_app.single_instance, "release_settings_window_restore_event"), \
-                 mock.patch.object(qt_settings_app.bridge_launcher, "stop_in_process_bridge", return_value=True), \
-                 mock.patch.object(qt_settings_app.element_navigation_control_windows, "shutdown_element_navigation"), \
-                 mock.patch.object(qt_settings_app.audio_playback, "cleanup_retained_portaudio_test_resources"):
-                self.assertEqual(qt_settings_app.run_settings_window(), 0)
+            try:
+                with mock.patch.dict(os.environ, clean_env, clear=True), \
+                     mock.patch.object(qt_settings_app.sys, "platform", platform), \
+                     mock.patch.object(qt_settings_app.config, "configure_portable_environment"), \
+                     mock.patch.object(qt_settings_app.config, "config_root", return_value=Path(directory)), \
+                     mock.patch.object(qt_settings_app, "_load_qt_classes", return_value=fake_classes), \
+                     mock.patch.object(qt_settings_app, "_connect_application_exit"), \
+                     mock.patch.object(qt_settings_app, "_apply_application_identity"), \
+                     mock.patch.object(qt_settings_app, "_apply_application_icon"), \
+                     mock.patch.object(qt_settings_app, "_settings_window_handle", return_value=0), \
+                     mock.patch.object(qt_settings_app, "_mark_settings_window_for_activation"), \
+                     mock.patch.object(qt_settings_app, "_shutdown_diagnostics_workers"), \
+                     mock.patch.object(qt_settings_app.window_chrome_windows, "apply_settings_window_chrome"), \
+                     mock.patch.object(qt_settings_app.single_instance, "register_settings_window_restore_event"), \
+                     mock.patch.object(qt_settings_app.single_instance, "release_settings_window_restore_event"), \
+                     mock.patch.object(qt_settings_app.bridge_launcher, "stop_in_process_bridge", return_value=True), \
+                     mock.patch.object(qt_settings_app.element_navigation_control_windows, "shutdown_element_navigation"), \
+                     mock.patch.object(qt_settings_app.audio_playback, "cleanup_retained_portaudio_test_resources"):
+                    self.assertEqual(qt_settings_app.run_settings_window(), 0)
+            finally:
+                import logging
+
+                logger = logging.getLogger(qt_settings_app.logging_setup.LOGGER_NAME)
+                for handler in list(logger.handlers):
+                    handler.close()
+                    logger.removeHandler(handler)
+                qt_settings_app.logging_setup._configured = False
         return calls
 
     def test_windows_defaults_to_software_quick_api_for_layered_overlay(self):
@@ -308,7 +320,10 @@ print(json.dumps({'native_styles': hex(style), 'focus_preserved': True, 'animate
 '''
 
 
-@unittest.skipUnless(sys.platform == 'win32', 'requires a private Windows desktop')
+@unittest.skipUnless(
+    sys.platform == 'win32' and test_qt_settings_app._HAS_PYSIDE6,
+    'requires PySide6 on Windows desktop',
+)
 class NativeVoiceActivityOverlayTests(unittest.TestCase):
     def test_native_overlay_animates_without_stealing_focus_and_hides(self):
         env = dict(os.environ, QT_QPA_PLATFORM='windows', QT_QUICK_BACKEND='software')
