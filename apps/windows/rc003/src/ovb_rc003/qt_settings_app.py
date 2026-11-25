@@ -10464,6 +10464,7 @@ def _load_qt_classes() -> dict:
         # QWidget-capable application required by embedded element navigation.
         "QGuiApplication": QApplication,
         "QIcon": QIcon,
+        "QObject": QObject,
         "QQmlApplicationEngine": QQmlApplicationEngine,
         "QQuickWindow": QQuickWindow,
         "QSGRendererInterface": QSGRendererInterface,
@@ -10485,6 +10486,74 @@ _QML_MODULE_URI = "OvbRc003Settings"
 _QML_CONTROLLER_TYPE_NAME = "SettingsController"
 _QML_MAPPING_MODEL_TYPE_NAME = "ButtonMappingModel"
 _QML_DIAGNOSTICS_TYPE_NAME = "DiagnosticsController"  # XRBM-031
+
+
+def _find_voice_activity_overlay(
+    root_window: object, qobject_cls: object = None
+) -> object:
+    find_child = getattr(root_window, "findChild", None)
+    if not callable(find_child):
+        return None
+    if qobject_cls is not None:
+        try:
+            found = find_child(qobject_cls, "voiceActivityOverlay")
+        except TypeError:
+            found = None
+        if found is not None:
+            return found
+    try:
+        return find_child(object, "voiceActivityOverlay")
+    except TypeError:
+        return None
+
+
+def _bind_voice_activity_overlay_topmost(
+    root_window: object,
+    controller: object,
+    *,
+    qobject_cls: object = None,
+    promote: Optional[Callable[[object], bool]] = None,
+) -> Optional[object]:
+    """Re-assert HWND_TOPMOST whenever the voice overlay becomes visible.
+
+    Event-driven only: runs on show/re-engagement transitions, never on a
+    background timer, so idle overhead stays zero and focus never moves.
+    """
+
+    overlay = _find_voice_activity_overlay(root_window, qobject_cls=qobject_cls)
+    if overlay is None:
+        return None
+    promote_fn = promote or window_chrome_windows.promote_overlay_topmost
+
+    def _promote_if_visible(visible: Optional[bool] = None) -> None:
+        if visible is None:
+            is_visible = getattr(overlay, "isVisible", None)
+            visible = (
+                bool(is_visible())
+                if callable(is_visible)
+                else bool(getattr(overlay, "visible", False))
+            )
+        if visible:
+            promote_fn(overlay)
+
+    visible_changed = getattr(overlay, "visibleChanged", None)
+    if visible_changed is not None and callable(
+        getattr(visible_changed, "connect", None)
+    ):
+        visible_changed.connect(_promote_if_visible)
+
+    voice_changed = getattr(controller, "voiceActivityChanged", None)
+    if voice_changed is not None and callable(
+        getattr(voice_changed, "connect", None)
+    ):
+        def _on_voice_activity_changed() -> None:
+            if getattr(controller, "voiceActivityState", ""):
+                _promote_if_visible()
+
+        voice_changed.connect(_on_voice_activity_changed)
+
+    _promote_if_visible()
+    return overlay
 
 
 def run_settings_window(
@@ -10623,6 +10692,11 @@ def run_settings_window(
         root_window = root_objects[0]
         update_application_icon()
         window_chrome_windows.apply_settings_window_chrome(root_window)
+        _voice_overlay = _bind_voice_activity_overlay_topmost(
+            root_window,
+            controller,
+            qobject_cls=classes.get("QObject"),
+        )
 
         # The real QML window and full-exit signal are ready here. Publish the
         # capability before optional element navigation startup, whose bounded

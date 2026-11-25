@@ -221,6 +221,74 @@ class VoiceActivityGraphicsApiTests(unittest.TestCase):
         self.assertEqual(self._run_with_env({"QSG_RHI_BACKEND": "opengl"}), [])
 
 
+class VoiceActivityTopmostBindingTests(unittest.TestCase):
+    def test_promotes_only_when_visible_or_reengaged_while_visible(self):
+        class _Signal:
+            def __init__(self):
+                self._callbacks = []
+
+            def connect(self, fn):
+                self._callbacks.append(fn)
+
+            def emit(self, *args):
+                for fn in list(self._callbacks):
+                    fn(*args)
+
+        class _Overlay:
+            def __init__(self):
+                self._visible = False
+                self.visibleChanged = _Signal()
+
+            def isVisible(self):
+                return self._visible
+
+            def set_visible(self, value):
+                self._visible = bool(value)
+                self.visibleChanged.emit(self._visible)
+
+        class _Root:
+            def __init__(self, overlay):
+                self._overlay = overlay
+
+            def findChild(self, _cls, name):
+                return self._overlay if name == "voiceActivityOverlay" else None
+
+        class _Controller:
+            def __init__(self):
+                self.voiceActivityState = ""
+                self.voiceActivityChanged = _Signal()
+
+        overlay = _Overlay()
+        controller = _Controller()
+        promoted = []
+        bound = qt_settings_app._bind_voice_activity_overlay_topmost(
+            _Root(overlay),
+            controller,
+            promote=lambda win: promoted.append(win) or True,
+        )
+        self.assertIs(bound, overlay)
+        # Hidden at startup: zero Win32 calls.
+        self.assertEqual(promoted, [])
+        # Voice state change while still hidden does not promote prematurely.
+        controller.voiceActivityState = "listening"
+        controller.voiceActivityChanged.emit()
+        self.assertEqual(promoted, [])
+        # Showing promotes once.
+        overlay.set_visible(True)
+        self.assertEqual(promoted, [overlay])
+        # Transitioning to empty while fading out does not promote.
+        controller.voiceActivityState = ""
+        controller.voiceActivityChanged.emit()
+        self.assertEqual(len(promoted), 1)
+        # Re-engaging during fade-out promotes again.
+        controller.voiceActivityState = "listening"
+        controller.voiceActivityChanged.emit()
+        self.assertEqual(len(promoted), 2)
+        # Hiding does not promote.
+        overlay.set_visible(False)
+        self.assertEqual(len(promoted), 2)
+
+
 _NATIVE_PROBE = r'''
 import ctypes, json, os, time
 from ctypes import wintypes as w
@@ -245,6 +313,9 @@ engine.warnings.connect(lambda entries: warnings.extend(str(e) for e in entries)
 engine.load(QUrl.fromLocalFile(str(m._qml_directory() / 'VoiceActivityOverlay.qml')))
 assert engine.rootObjects(), warnings
 overlay = engine.rootObjects()[0]
+overlay.visibleChanged.connect(
+    lambda visible: visible and m.window_chrome_windows.promote_overlay_topmost(overlay)
+)
 def pump(seconds):
     until = time.monotonic() + seconds
     while time.monotonic() < until:
@@ -308,10 +379,35 @@ pump(0.4)
 assert not overlay.isVisible(), 'overlay did not fade out'
 assert not spinner.isVisible() and not waveform.isVisible()
 # All bar animations stop once the overlay is hidden.
+# Simulate Windows 11 demoting a hidden WS_EX_TOPMOST tool window beneath normal
+# windows, then verify re-showing promotes it back above target without stealing focus.
+u.SetWindowPos.argtypes = (w.HWND, w.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, w.UINT)
+u.SetWindowPos.restype = w.BOOL
+u.GetTopWindow.argtypes = (w.HWND,)
+u.GetTopWindow.restype = w.HWND
+u.GetWindow.argtypes = (w.HWND, w.UINT)
+u.GetWindow.restype = w.HWND
+target.show()
+target.requestActivate()
+pump(0.15)
+overlay_hwnd = int(overlay.winId())
+target_hwnd = int(target.winId())
+assert u.SetWindowPos(w.HWND(overlay_hwnd), w.HWND(1), 0, 0, 0, 0, 0x0013)
+active_before_repromote = u.GetActiveWindow()
+fg_before_repromote = u.GetForegroundWindow()
 overlay.setProperty('activityState', 'listening')
 pump(0.2)
 assert overlay.isVisible()
 assert waveform.isVisible() and not spinner.isVisible(), 'next recording did not restore waveform'
+assert u.GetActiveWindow() == active_before_repromote, 'topmost promote changed active window'
+assert u.GetForegroundWindow() == fg_before_repromote, 'topmost promote changed foreground'
+cur = u.GetTopWindow(None)
+z_seen = []
+while cur:
+    if int(cur) in (overlay_hwnd, target_hwnd):
+        z_seen.append(int(cur))
+    cur = u.GetWindow(cur, 2)
+assert z_seen == [overlay_hwnd, target_hwnd], ('overlay stayed behind target', z_seen)
 overlay.setProperty('activityState', '')
 pump(0.4)
 assert not warnings, warnings

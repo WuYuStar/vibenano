@@ -4,7 +4,7 @@
 
 **[VibeNano 下载页面与说明](https://github.com/WuYuStar/vibenano)** · [VibeNano 版本下载](https://github.com/WuYuStar/vibenano/releases)
 
-**当前源码状态：** 1.1.3 纯便携修改版。配置、日志、模型、缓存和临时文件统一位于主程序旁的 `data` 目录；录音动画修复了 Windows 11 下透明分层窗口不可见的问题，并保留后台事件驱动与低轮询日志优化。
+**当前源码状态：** 1.1.4 纯便携修改版。配置、日志、模型、缓存和临时文件统一位于主程序旁的 `data` 目录；录音动画已修复 Windows 11 透明分层渲染与长时间挂机后 Z-Order 置顶掉层被遮挡的问题，并保留后台事件驱动与低轮询日志优化。
 
 ## 下载与升级
 

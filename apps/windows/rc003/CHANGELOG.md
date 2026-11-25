@@ -3,6 +3,11 @@
 按版本记录功能变化；各条目中的状态指该版本发布或测试时的情况。
 最新版下载见[项目首页](../../../README.md)，详细验证记录见 [TESTING.md](TESTING.md)。
 
+## 1.1.4 录音悬浮窗置顶层级防掉层修复
+
+- 修复 Windows 11 下长时间运行或经历锁屏、休眠、全屏/任务栏切换后，隐藏状态的 `WS_EX_TOPMOST` 录音悬浮窗可能被系统沉降到普通应用窗口下方导致动画被遮挡的问题；仅在浮层变为可见或淡出期间重新进入录音态时，事件驱动地执行一次无焦点 `SetWindowPos(HWND_TOPMOST)`（`SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOOWNERZORDER`），不增加后台轮询或待机开销，也不抢占当前输入焦点。
+- 保留 `1.1.3` 的 Windows 11 软件渲染修复、`1.1.2` 纯便携 `data` 目录、事件驱动动画及日志精简优化，版本更新为 `1.1.4`。
+
 ## 1.1.3 录音悬浮动画显示修复
 
 - 修复 Windows 11 默认硬件渲染（D3D11 RHI）下，透明穿透分层悬浮窗（`VoiceActivityOverlay`）虽然变为可见但呈现全透明空白、不显示录音波形与识别旋转动画的问题；在 Windows 运行设置窗口时默认启用 Qt Quick `Software` 渲染接口（保留 `QT_QUICK_BACKEND` / `QSG_RHI_BACKEND` 显式覆盖）。

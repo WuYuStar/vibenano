@@ -97,6 +97,78 @@ class WindowChromeWindowsTests(unittest.TestCase):
         )
         self.assertFalse(touched)
 
+    def test_promote_overlay_topmost_is_noop_off_windows(self) -> None:
+        self.assertFalse(
+            window_chrome_windows.promote_overlay_topmost(
+                _Window(),
+                platform="linux",
+            )
+        )
+
+    def test_promote_overlay_topmost_reasserts_topmost_without_activating(self) -> None:
+        calls: list[tuple[int, int, int, int, int, int, int]] = []
+
+        def set_pos(hwnd, insert_after, x, y, cx, cy, flags) -> int:
+            calls.append(
+                (
+                    int(hwnd.value),
+                    int(insert_after.value),
+                    x,
+                    y,
+                    cx,
+                    cy,
+                    int(flags.value),
+                )
+            )
+            return 1
+
+        self.assertTrue(
+            window_chrome_windows.promote_overlay_topmost(
+                _Window(),
+                platform="win32",
+                set_window_pos=set_pos,
+            )
+        )
+        self.assertEqual(len(calls), 1)
+        hwnd, insert_after, x, y, cx, cy, flags = calls[0]
+        self.assertEqual(hwnd, 4321)
+        # HWND_TOPMOST is (HWND)-1; ctypes c_void_p(-1).value is -1 or unsigned max.
+        self.assertIn(insert_after, (-1, (1 << (ctypes.sizeof(ctypes.c_void_p) * 8)) - 1))
+        self.assertEqual((x, y, cx, cy), (0, 0, 0, 0))
+        self.assertEqual(flags, window_chrome_windows._PROMOTE_OVERLAY_FLAGS)
+
+    def test_promote_overlay_topmost_handles_missing_hwnd_and_errors(self) -> None:
+        class ZeroWindow:
+            def winId(self) -> int:
+                return 0
+
+        touched = False
+
+        def set_pos(*_args) -> int:
+            nonlocal touched
+            touched = True
+            return 1
+
+        self.assertFalse(
+            window_chrome_windows.promote_overlay_topmost(
+                ZeroWindow(),
+                platform="win32",
+                set_window_pos=set_pos,
+            )
+        )
+        self.assertFalse(touched)
+
+        def failing_set_pos(*_args) -> int:
+            raise OSError("boom")
+
+        self.assertFalse(
+            window_chrome_windows.promote_overlay_topmost(
+                _Window(),
+                platform="win32",
+                set_window_pos=failing_set_pos,
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
